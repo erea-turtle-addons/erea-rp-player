@@ -1,0 +1,234 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+
+  <!-- Item reading frame - matches CreateFrame("Frame", "EreaRpPlayerReadFrame", UIParent) from v1.3.0 -->
+  <Frame name="EreaRpPlayerReadFrame" parent="UIParent" enableMouse="true" movable="true" resizable="true" frameStrata="DIALOG" hidden="true">
+    <Size>
+      <AbsDimension x="450" y="500"/>
+    </Size>
+    <ResizeBounds>
+      <minResize>
+        <AbsDimension x="400" y="300"/>
+      </minResize>
+      <maxResize>
+        <AbsDimension x="800" y="800"/>
+      </maxResize>
+    </ResizeBounds>
+    <Anchors>
+      <Anchor point="CENTER"/>
+    </Anchors>
+    <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background"
+              edgeFile="Interface\DialogFrame\UI-DialogBox-Border"
+              tile="true">
+      <EdgeSize>
+        <AbsValue val="32"/>
+      </EdgeSize>
+      <TileSize>
+        <AbsValue val="32"/>
+      </TileSize>
+      <BackgroundInsets>
+        <AbsInset left="11" right="12" top="12" bottom="11"/>
+      </BackgroundInsets>
+    </Backdrop>
+
+    <Layers>
+      <Layer level="OVERLAY">
+        <!-- Title (used to distinguish read from show) -->
+        <FontString name="$parentTitle" inherits="GameFontNormalLarge" hidden="true">
+          <Anchors>
+            <Anchor point="TOP">
+              <Offset>
+                <AbsDimension x="0" y="-20"/>
+              </Offset>
+            </Anchor>
+          </Anchors>
+        </FontString>
+      </Layer>
+
+      <Layer level="ARTWORK">
+        <!-- Item icon -->
+        <Texture name="$parentIcon">
+          <Size>
+            <AbsDimension x="40" y="40"/>
+          </Size>
+          <Anchors>
+            <Anchor point="TOPLEFT">
+              <Offset>
+                <AbsDimension x="20" y="-50"/>
+              </Offset>
+            </Anchor>
+          </Anchors>
+          <TexCoords left="0.07" right="0.93" top="0.07" bottom="0.93"/>
+        </Texture>
+
+        <!-- Item name (next to icon) - this is the visible title -->
+        <FontString name="$parentItemName" inherits="GameFontNormalLarge" justifyH="LEFT">
+          <Size>
+            <AbsDimension x="0" y="0"/>
+          </Size>
+          <Anchors>
+            <Anchor point="TOPLEFT" relativeTo="$parentIcon" relativePoint="TOPRIGHT">
+              <Offset>
+                <AbsDimension x="10" y="0"/>
+              </Offset>
+            </Anchor>
+            <Anchor point="RIGHT">
+              <Offset>
+                <AbsDimension x="-40" y="0"/>
+              </Offset>
+            </Anchor>
+          </Anchors>
+          <Color r="1" g="0.82" b="0"/>
+        </FontString>
+
+        <!-- Item description -->
+        <FontString name="$parentItemDesc" inherits="GameFontHighlight" justifyH="LEFT" justifyV="TOP">
+          <Size>
+            <AbsDimension x="0" y="0"/>
+          </Size>
+          <Anchors>
+            <Anchor point="TOPLEFT" relativeTo="$parentIcon" relativePoint="TOPRIGHT">
+              <Offset>
+                <AbsDimension x="10" y="-20"/>
+              </Offset>
+            </Anchor>
+            <Anchor point="RIGHT">
+              <Offset>
+                <AbsDimension x="-40" y="0"/>
+              </Offset>
+            </Anchor>
+          </Anchors>
+        </FontString>
+
+        <!-- Separator line -->
+        <Texture name="$parentSeparator">
+          <Size>
+            <AbsDimension x="0" y="1"/>
+          </Size>
+          <Anchors>
+            <Anchor point="LEFT">
+              <Offset>
+                <AbsDimension x="20" y="0"/>
+              </Offset>
+            </Anchor>
+            <Anchor point="RIGHT">
+              <Offset>
+                <AbsDimension x="-40" y="0"/>
+              </Offset>
+            </Anchor>
+            <Anchor point="TOP" relativeTo="$parentIcon" relativePoint="BOTTOM">
+              <Offset>
+                <AbsDimension x="0" y="-10"/>
+              </Offset>
+            </Anchor>
+          </Anchors>
+          <Color r="0.5" g="0.5" b="0.5" a="0.5"/>
+        </Texture>
+      </Layer>
+    </Layers>
+
+    <Frames>
+      <!-- Draggable title bar -->
+      <Frame name="$parentTitleBar" enableMouse="true">
+        <Size>
+          <AbsDimension x="0" y="30"/>
+        </Size>
+        <Anchors>
+          <Anchor point="TOPLEFT">
+            <Offset>
+              <AbsDimension x="10" y="-10"/>
+            </Offset>
+          </Anchor>
+          <Anchor point="TOPRIGHT">
+            <Offset>
+              <AbsDimension x="-30" y="-10"/>
+            </Offset>
+          </Anchor>
+        </Anchors>
+      </Frame>
+
+      <!-- Close button -->
+      <Button name="$parentCloseButton" inherits="UIPanelCloseButton">
+        <Anchors>
+          <Anchor point="TOPRIGHT">
+            <Offset>
+              <AbsDimension x="-5" y="-5"/>
+            </Offset>
+          </Anchor>
+        </Anchors>
+      </Button>
+
+      <!-- Scroll frame for content -->
+      <ScrollFrame name="RPReadScrollFrame" inherits="UIPanelScrollFrameTemplate">
+        <Anchors>
+          <Anchor point="TOPLEFT">
+            <Offset>
+              <AbsDimension x="20" y="-120"/>
+            </Offset>
+          </Anchor>
+          <Anchor point="BOTTOMRIGHT">
+            <Offset>
+              <AbsDimension x="-40" y="20"/>
+            </Offset>
+          </Anchor>
+        </Anchors>
+        <ScrollChild>
+          <Frame name="$parentScrollChild">
+            <Size>
+              <AbsDimension x="380" y="1"/>
+            </Size>
+            <Layers>
+              <Layer level="OVERLAY">
+                <FontString name="$parentText" inherits="GameFontHighlight" justifyH="LEFT" justifyV="TOP" spacing="3">
+                  <Size>
+                    <AbsDimension x="380" y="0"/>
+                  </Size>
+                  <Anchors>
+                    <Anchor point="TOPLEFT"/>
+                  </Anchors>
+                </FontString>
+              </Layer>
+            </Layers>
+          </Frame>
+        </ScrollChild>
+      </ScrollFrame>
+
+      <!-- Resize grip button (transparent) -->
+      <Button name="$parentResizeButton">
+        <Size>
+          <AbsDimension x="16" y="16"/>
+        </Size>
+        <Anchors>
+          <Anchor point="BOTTOMRIGHT">
+            <Offset>
+              <AbsDimension x="-6" y="7"/>
+            </Offset>
+          </Anchor>
+        </Anchors>
+        <Scripts>
+          <OnMouseDown>
+            EreaRpPlayerReadFrame:StartSizing("BOTTOMRIGHT")
+          </OnMouseDown>
+          <OnMouseUp>
+            EreaRpPlayerReadFrame:StopMovingOrSizing()
+          </OnMouseUp>
+        </Scripts>
+      </Button>
+    </Frames>
+
+    <Scripts>
+      <OnLoad>
+        this:SetBackdropColor(0, 0, 0, 1)
+      </OnLoad>
+      <OnSizeChanged>
+        -- Update scroll child width when frame is resized
+        local width = this:GetWidth()
+        if width and width > 0 then
+          local scrollChildWidth = width - 70  -- Account for padding and scrollbar
+          RPReadScrollFrameScrollChild:SetWidth(scrollChildWidth)
+          RPReadScrollFrameScrollChildText:SetWidth(scrollChildWidth)
+        end
+      </OnSizeChanged>
+    </Scripts>
+  </Frame>
+
+</Ui>
