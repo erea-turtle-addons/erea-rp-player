@@ -1,0 +1,42 @@
+## Interface: 11200
+## Title: E'rea RP Player
+## Notes: Player addon for managing RP quest items inventory
+## Author: Erea
+## Version: 1.1.4
+## DefaultState: enabled
+## SavedVariablesPerCharacter: EreaRpPlayerDB, EreaRpPlayerDebugLog
+
+# Version (generated during build)
+version.lua
+
+# Common Libraries
+libraries\core.lua
+libraries\logging.lua
+libraries\encoding.lua
+libraries\unit-utils.lua
+libraries\messaging.lua
+libraries\object-database.lua
+libraries\inventory.lua
+libraries\rp-business.lua
+blp-videos\animation-registry.lua
+libraries\cinematic-animations.lua
+libraries\video-player.lua
+libraries\rp-actions.lua
+libraries\merge-manager.lua
+views\log-viewer.xml
+views\cinematic-frame.xml
+presenters\log-viewer.lua
+presenters\cinematic-frame.lua
+
+# Player
+views\bag-frame.xml
+views\read-frame.xml
+presenters\bag-frame.lua
+presenters\read-frame.lua
+services\dialogs.lua
+services\drag-drop.lua
+services\player-actions.lua
+services\inventory.lua
+rp-player.lua
+services\event-handler.lua
+minimap-button.lua
