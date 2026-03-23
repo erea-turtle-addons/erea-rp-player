@@ -3,12 +3,12 @@
   <!-- Main bag frame - matches CreateFrame("Frame", "EreaRpPlayerBagFrame", UIParent) from v1.3.0 -->
   <Frame name="EreaRpPlayerBagFrame" parent="UIParent" enableMouse="true" movable="true" hidden="true">
     <Size>
-      <AbsDimension x="240" y="280"/>
+      <AbsDimension x="235" y="280"/>
     </Size>
     <Anchors>
       <Anchor point="CENTER"/>
     </Anchors>
-    <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background"
+    <Backdrop bgFile="Interface\ChatFrame\ChatFrameBackground"
               edgeFile="Interface\DialogFrame\UI-DialogBox-Border"
               tile="true">
       <EdgeSize>
@@ -80,6 +80,18 @@
         </Anchors>
       </Button>
 
+      <!-- Database-selector dropdown: 5px from each side border -->
+      <!-- Frame width=235, 5px each side => 225px total. UIDropDownMenu total = SetWidth+25, so SetWidth=200 -->
+      <Frame name="$parentDbDropdown" inherits="UIDropDownMenuTemplate">
+        <Anchors>
+          <Anchor point="TOPLEFT">
+            <Offset>
+              <AbsDimension x="7" y="-35"/>
+            </Offset>
+          </Anchor>
+        </Anchors>
+      </Frame>
+
       <!-- Slots container -->
       <Frame name="$parentSlotsContainer">
         <Size>
@@ -88,7 +100,7 @@
         <Anchors>
           <Anchor point="TOPLEFT">
             <Offset>
-              <AbsDimension x="20" y="-40"/>
+              <AbsDimension x="20" y="-62"/>
             </Offset>
           </Anchor>
         </Anchors>

@@ -63,14 +63,12 @@ StaticPopupDialogs["EreaRpPlayer_MODIFY_CONTENT"] = {
     OnAccept = function()
         local newContent = getglobal(this:GetParent():GetName().."EditBox"):GetText()
         if not newContent or newContent == "" then
-            DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Content cannot be empty!", 1, 0, 0)
             return
         end
 
         -- Get item and action from dialog data
         local data = getglobal(this:GetParent():GetName()).data
         if not data or not data.item or not data.action then
-            DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Error: Dialog data missing!", 1, 0, 0)
             return
         end
 
@@ -88,9 +86,6 @@ StaticPopupDialogs["EreaRpPlayer_MODIFY_CONTENT"] = {
             end
 
             EreaRpPlayer_RefreshBag()
-            DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00[RP Player]|r Content modified: " .. data.item.name, 0, 1, 0)
-        else
-            DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Failed to modify content: " .. tostring(result.message), 1, 0, 0)
         end
     end,
     OnShow = function()
@@ -118,22 +113,14 @@ StaticPopupDialogs["EreaRpPlayer_SHOW_REQUEST"] = {
             -- Show the read frame with the item content, including who showed it
             EreaRpPlayer_ReadItem(EreaRpPlayer_PendingShowItem, EreaRpPlayer_PendingShowSender)
 
-            -- Send acceptance message to chat
-            if EreaRpPlayer_PendingShowSender then
-                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF00FF00[RP Player]|r You accepted to view '%s' from %s", EreaRpPlayer_PendingShowItem.name, EreaRpPlayer_PendingShowSender), 0, 1, 0)
-            end
-
             EreaRpPlayer_PendingShowItem = nil
             EreaRpPlayer_PendingShowSender = nil
         end
     end,
     OnCancel = function()
         if EreaRpPlayer_PendingShowSender and EreaRpPlayer_PendingShowItem then
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFFFF0000[RP Player]|r You rejected to view '%s' from %s", EreaRpPlayer_PendingShowItem.name, EreaRpPlayer_PendingShowSender), 1, 0, 0)
-
             -- Send rejection notification back to sender
-            local myName = UnitName("player")
-            messaging.SendShowRejectMessage(EreaRpPlayer_PendingShowSender, myName, EreaRpPlayer_PendingShowItem.name)
+            messaging.SendShowRejectMessage(EreaRpPlayer_PendingShowSender, EreaRpPlayer_PendingShowItem.name)
             Log("Sent SHOW_REJECT to " .. EreaRpPlayer_PendingShowSender)
         end
         EreaRpPlayer_PendingShowItem = nil
@@ -159,12 +146,8 @@ StaticPopupDialogs["EreaRpPlayer_GIVE_REQUEST"] = {
             EreaRpPlayer_RefreshBag()
 
             -- Send acceptance message
-            local myName = UnitName("player")
-            messaging.SendGiveAcceptMessage(EreaRpPlayer_PendingGiveSender, myName, EreaRpPlayer_PendingGiveObjectDef.name)
+            messaging.SendGiveAcceptMessage(EreaRpPlayer_PendingGiveObjectDef.name)
             Log("Sent GIVE_ACCEPT to " .. EreaRpPlayer_PendingGiveSender)
-
-            -- Display message
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF00FF00[RP Player]|r You accepted '%s' from %s", EreaRpPlayer_PendingGiveObjectDef.name, EreaRpPlayer_PendingGiveSender), 0, 1, 0)
 
             -- Clear pending
             EreaRpPlayer_PendingGiveItem = nil
@@ -176,12 +159,8 @@ StaticPopupDialogs["EreaRpPlayer_GIVE_REQUEST"] = {
     OnCancel = function()
         if EreaRpPlayer_PendingGiveSender and EreaRpPlayer_PendingGiveObjectDef then
             -- Send rejection message
-            local myName = UnitName("player")
-            messaging.SendGiveRejectMessage(EreaRpPlayer_PendingGiveSender, myName, EreaRpPlayer_PendingGiveObjectDef.name)
+            messaging.SendGiveRejectMessage(EreaRpPlayer_PendingGiveObjectDef.name)
             Log("Sent GIVE_REJECT to " .. EreaRpPlayer_PendingGiveSender)
-
-            -- Display message
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFFFF0000[RP Player]|r You declined '%s' from %s", EreaRpPlayer_PendingGiveObjectDef.name, EreaRpPlayer_PendingGiveSender), 1, 0, 0)
         end
 
         -- Clear pending
@@ -219,12 +198,8 @@ StaticPopupDialogs["EreaRpPlayer_TRADE_REQUEST"] = {
             EreaRpPlayer_RefreshBag()
 
             -- Send acceptance message
-            local myName = UnitName("player")
-            messaging.SendTradeAcceptMessage(EreaRpPlayer_PendingTradeSender, myName, EreaRpPlayer_PendingTradeObjectDef.name)
+            messaging.SendTradeAcceptMessage(EreaRpPlayer_PendingTradeSender, EreaRpPlayer_PendingTradeObjectDef.name)
             Log("Sent TRADE_ACCEPT to " .. EreaRpPlayer_PendingTradeSender)
-
-            -- Display message
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF00FF00[RP Player]|r You accepted '%s' from %s", EreaRpPlayer_PendingTradeObjectDef.name, EreaRpPlayer_PendingTradeSender), 0, 1, 0)
 
             -- Clear pending
             EreaRpPlayer_PendingTradeItem = nil
@@ -235,12 +210,8 @@ StaticPopupDialogs["EreaRpPlayer_TRADE_REQUEST"] = {
     OnCancel = function()
         if EreaRpPlayer_PendingTradeSender and EreaRpPlayer_PendingTradeObjectDef then
             -- Send rejection message
-            local myName = UnitName("player")
-            messaging.SendTradeRejectMessage(EreaRpPlayer_PendingTradeSender, myName, EreaRpPlayer_PendingTradeObjectDef.name)
+            messaging.SendTradeRejectMessage(EreaRpPlayer_PendingTradeSender, EreaRpPlayer_PendingTradeObjectDef.name)
             Log("Sent TRADE_REJECT to " .. EreaRpPlayer_PendingTradeSender)
-
-            -- Display message
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFFFF0000[RP Player]|r You declined '%s' from %s", EreaRpPlayer_PendingTradeObjectDef.name, EreaRpPlayer_PendingTradeSender), 1, 0, 0)
         end
 
         -- Clear pending
@@ -249,6 +220,47 @@ StaticPopupDialogs["EreaRpPlayer_TRADE_REQUEST"] = {
         EreaRpPlayer_PendingTradeSender = nil
     end,
     timeout = 30,
+    whileDead = true,
+    hideOnEscape = true
+}
+
+-- ============================================================================
+-- Forge Confirm Dialog
+-- ============================================================================
+-- Shown when player clicks the glowing partner slot (or drags A onto B).
+-- Global state: EreaRpPlayer_ForgeOutputGuid, EreaRpPlayer_ForgeIngredientSlots,
+--               EreaRpPlayer_ForgeCinematicKey, EreaRpPlayer_ForgeNotifyGm
+StaticPopupDialogs["EreaRpPlayer_FORGE_CONFIRM"] = {
+    text = "Combine %s\ninto %s?",
+    button1 = "Combine",
+    button2 = "Cancel",
+    OnAccept = function()
+        EreaRpPlayer_ExecuteForge()
+    end,
+    OnCancel = function()
+        EreaRpPlayer_CancelForge()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true
+}
+
+-- ============================================================================
+-- Forge Broadcast Dialog
+-- ============================================================================
+-- Shown after a successful forge when the recipe has a cinematicKey.
+StaticPopupDialogs["EreaRpPlayer_FORGE_BROADCAST"] = {
+    text = "Announce your creation to the raid?",
+    button1 = "Broadcast",
+    button2 = "Skip",
+    OnAccept = function()
+        EreaRpPlayer_BroadcastForge()
+    end,
+    OnCancel = function()
+        -- Skip — clear cinematic key
+        EreaRpPlayer_ForgeCinematicKey = nil
+    end,
+    timeout = 0,
     whileDead = true,
     hideOnEscape = true
 }

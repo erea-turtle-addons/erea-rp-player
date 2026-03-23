@@ -77,13 +77,11 @@ StaticPopupDialogs["EreaRpPlayer_REQUEST_INPUT"] = {
     OnAccept = function()
         local userInput = getglobal(this:GetParent():GetName().."EditBox"):GetText()
         if not userInput or userInput == "" then
-            DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Input cannot be empty!", 1, 0, 0)
             return
         end
 
         -- Get item from global state (WoW 1.12 compat)
         if not EreaRpPlayer_PendingInputItem then
-            DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Error: Dialog data missing!", 1, 0, 0)
             return
         end
 
@@ -91,7 +89,6 @@ StaticPopupDialogs["EreaRpPlayer_REQUEST_INPUT"] = {
         -- Template formatting happens when displaying via contentTemplate
         if string.len(userInput) > 150 then
             userInput = string.sub(userInput, 1, 150)
-            DEFAULT_CHAT_FRAME:AddMessage("|cFFFFAA00[RP Player]|r Text truncated to 150 characters", 1, 1, 0)
         end
 
         -- v0.2.1: Update instance customText in inventory (instances have only {guid, customText, customNumber, slot})
@@ -106,7 +103,6 @@ StaticPopupDialogs["EreaRpPlayer_REQUEST_INPUT"] = {
         if EreaRpPlayer_RefreshBag then
             EreaRpPlayer_RefreshBag()
         end
-        DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00[RP Player]|r Custom text set: " .. EreaRpPlayer_PendingInputItem.name, 0, 1, 0)
 
         -- Clear global state
         EreaRpPlayer_PendingInputItem = nil
@@ -165,12 +161,15 @@ end
 local function HandleCreateObject(item, action, result)
     local objectGuid = result.data.objectGuid
     local customText = result.data.customText or ""
+    local additionalText = result.data.additionalText or ""
     local customNumber = tonumber(result.data.customNumber) or 0
 
-    -- Look up object definition from synced database
+    -- Look up object definition from active database
+    local activeDb = EreaRpPlayerDB and EreaRpPlayerDB.activeDatabaseId
+                     and EreaRpPlayerDB.databases[EreaRpPlayerDB.activeDatabaseId]
     local objectDef = nil
-    if EreaRpPlayerDB and EreaRpPlayerDB.syncedDatabase and EreaRpPlayerDB.syncedDatabase.items then
-        for id, obj in pairs(EreaRpPlayerDB.syncedDatabase.items) do
+    if activeDb and activeDb.items then
+        for id, obj in pairs(activeDb.items) do
             if obj.guid == objectGuid then
                 objectDef = obj
                 break
@@ -179,25 +178,21 @@ local function HandleCreateObject(item, action, result)
     end
 
     if not objectDef then
-        DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Cannot create object: Not found in database", 1, 0, 0)
-        DEFAULT_CHAT_FRAME:AddMessage("|cFFFFAA00[RP Player]|r Object GUID: " .. objectGuid, 1, 1, 0)
         return
     end
 
     -- Check if bag is full
     local inventoryModule = GetInventory()
     if inventoryModule.IsBagFull(EreaRpPlayerDB.inventory) then
-        DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Cannot create object: Bag is full", 1, 0, 0)
         return
     end
 
-    -- Create instance (minimal data: guid, customText, customNumber)
-    local instance = inventoryModule.CreateItemInstance(objectGuid, customText, customNumber)
+    -- Create instance (minimal data: guid, customText, additionalText, customNumber)
+    local instance = inventoryModule.CreateItemInstance(objectGuid, customText, additionalText, customNumber)
 
     -- Add to inventory (auto-assigns slot)
     local success, assignedSlot = inventoryModule.AddItemToInventory(EreaRpPlayerDB.inventory, instance)
     if not success then
-        DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Failed to add item to inventory", 1, 0, 0)
         return
     end
 
@@ -217,7 +212,6 @@ local function HandleDestroyItem(item, action, result)
     if EreaRpPlayer_DeleteItem then
         EreaRpPlayer_DeleteItem(item)
     end
-    DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00[RP Player]|r " .. (result.message or "Item destroyed"), 0, 1, 0)
 end
 
 -- ============================================================================
@@ -253,21 +247,18 @@ end
 -- HandleSuccess - Generic success message
 -- ============================================================================
 local function HandleSuccess(item, action, result)
-    DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00[RP Player]|r " .. (result.message or "Action executed: " .. action.label), 0, 1, 0)
 end
 
 -- ============================================================================
 -- HandleFail - Action failed (not an error, just failed validation)
 -- ============================================================================
 local function HandleFail(item, action, result)
-    DEFAULT_CHAT_FRAME:AddMessage("|cFFFFAA00[RP Player]|r " .. (result.message or "Action failed"), 1, 1, 0)
 end
 
 -- ============================================================================
 -- HandleError - Execution error
 -- ============================================================================
 local function HandleError(item, action, result)
-    DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Error: " .. (result.message or "Unknown error"), 1, 0, 0)
 end
 
 -- ============================================================================
@@ -294,7 +285,6 @@ function EreaRpPlayerActions:ExecuteAction(item, action)
     local result = rpActions.ExecuteAction(playerName, item, action.id)
 
     if not result then
-        DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Action execution failed: No result returned", 1, 0, 0)
         return
     end
 
@@ -342,8 +332,5 @@ function EreaRpPlayerActions:ExecuteAction(item, action)
     elseif result.result == rpActions.RESULT_TYPES.ERROR then
         HandleError(item, action, result)
 
-    else
-        -- Unknown result type
-        DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Unknown result type: " .. tostring(result.result), 1, 0, 0)
     end
 end

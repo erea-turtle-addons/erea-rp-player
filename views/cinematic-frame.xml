@@ -1,0 +1,216 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+
+  <!-- Cinematic dialogue frame - configurable left/right sides (portrait, animation, or nothing) -->
+  <Frame name="EreaRpCinematicFrame" parent="UIParent" enableMouse="true" frameStrata="FULLSCREEN_DIALOG" hidden="true">
+    <Size>
+      <AbsDimension x="640" y="162"/>
+    </Size>
+    <Anchors>
+      <Anchor point="TOP">
+        <Offset>
+          <AbsDimension x="0" y="-100"/>
+        </Offset>
+      </Anchor>
+    </Anchors>
+    <Backdrop bgFile="Interface\ChatFrame\ChatFrameBackground"
+              edgeFile="Interface\DialogFrame\UI-DialogBox-Border"
+              tile="true">
+      <EdgeSize>
+        <AbsValue val="32"/>
+      </EdgeSize>
+      <TileSize>
+        <AbsValue val="32"/>
+      </TileSize>
+      <BackgroundInsets>
+        <AbsInset left="11" right="12" top="12" bottom="11"/>
+      </BackgroundInsets>
+    </Backdrop>
+
+    <Layers>
+      <!-- 1px borders behind left and right sides -->
+      <Layer level="BORDER">
+        <Texture name="$parentLeftBorder">
+          <Size>
+            <AbsDimension x="132" y="132"/>
+          </Size>
+          <Anchors>
+            <Anchor point="TOPLEFT">
+              <Offset>
+                <AbsDimension x="14" y="-15"/>
+              </Offset>
+            </Anchor>
+          </Anchors>
+          <Color r="0.6" g="0.6" b="0.6" a="0.4"/>
+        </Texture>
+
+        <Texture name="$parentRightBorder" hidden="true">
+          <Size>
+            <AbsDimension x="132" y="132"/>
+          </Size>
+          <Anchors>
+            <Anchor point="TOPRIGHT">
+              <Offset>
+                <AbsDimension x="-14" y="-15"/>
+              </Offset>
+            </Anchor>
+          </Anchors>
+          <Color r="0.6" g="0.6" b="0.6" a="0.4"/>
+        </Texture>
+      </Layer>
+
+      <Layer level="ARTWORK">
+        <!--
+          Speaker name and dialogue text anchors are set dynamically in Lua
+          depending on left/right side visibility. Default XML anchors
+          define the "both visible" case. Lua re-anchors to $parentTextOrigin
+          (no left side) and $parentTextRightEdge (no right side) as needed.
+        -->
+        <FontString name="$parentSpeakerName" inherits="GameFontNormalLarge" justifyH="LEFT">
+          <Anchors>
+            <Anchor point="TOPLEFT" relativeTo="$parentLeftBorder" relativePoint="TOPRIGHT">
+              <Offset>
+                <AbsDimension x="10" y="-5"/>
+              </Offset>
+            </Anchor>
+            <Anchor point="RIGHT" relativeTo="$parentRightBorder" relativePoint="LEFT">
+              <Offset>
+                <AbsDimension x="-10" y="0"/>
+              </Offset>
+            </Anchor>
+          </Anchors>
+          <Color r="1" g="0.82" b="0"/>
+        </FontString>
+
+        <FontString name="$parentDialogueText" inherits="GameFontHighlight" justifyH="LEFT" justifyV="TOP">
+          <Size>
+            <AbsDimension x="0" y="100"/>
+          </Size>
+          <Anchors>
+            <Anchor point="TOPLEFT" relativeTo="$parentSpeakerName" relativePoint="BOTTOMLEFT">
+              <Offset>
+                <AbsDimension x="0" y="-8"/>
+              </Offset>
+            </Anchor>
+            <Anchor point="RIGHT" relativeTo="$parentRightBorder" relativePoint="LEFT">
+              <Offset>
+                <AbsDimension x="-10" y="0"/>
+              </Offset>
+            </Anchor>
+          </Anchors>
+        </FontString>
+
+        <!-- Left-side sprite-sheet animation texture (128x128, hidden by default) -->
+        <Texture name="$parentLeftAnimation" hidden="true">
+          <Size>
+            <AbsDimension x="128" y="128"/>
+          </Size>
+          <Anchors>
+            <Anchor point="TOPLEFT">
+              <Offset>
+                <AbsDimension x="16" y="-17"/>
+              </Offset>
+            </Anchor>
+          </Anchors>
+        </Texture>
+
+        <!-- Right-side sprite-sheet animation texture (128x128, hidden by default) -->
+        <Texture name="$parentRightAnimation" hidden="true">
+          <Size>
+            <AbsDimension x="128" y="128"/>
+          </Size>
+          <Anchors>
+            <Anchor point="TOPRIGHT">
+              <Offset>
+                <AbsDimension x="-16" y="-17"/>
+              </Offset>
+            </Anchor>
+          </Anchors>
+        </Texture>
+      </Layer>
+    </Layers>
+
+    <Frames>
+      <!-- Left-side 3D portrait (PlayerModel) 128x128 -->
+      <PlayerModel name="$parentLeftPortrait">
+        <Size>
+          <AbsDimension x="128" y="128"/>
+        </Size>
+        <Anchors>
+          <Anchor point="TOPLEFT">
+            <Offset>
+              <AbsDimension x="16" y="-17"/>
+            </Offset>
+          </Anchor>
+        </Anchors>
+      </PlayerModel>
+
+      <!-- Right-side 3D portrait (PlayerModel) 128x128, hidden by default -->
+      <PlayerModel name="$parentRightPortrait" hidden="true">
+        <Size>
+          <AbsDimension x="128" y="128"/>
+        </Size>
+        <Anchors>
+          <Anchor point="TOPRIGHT">
+            <Offset>
+              <AbsDimension x="-16" y="-17"/>
+            </Offset>
+          </Anchor>
+        </Anchors>
+      </PlayerModel>
+
+      <!-- Invisible anchor: text origin when left side is hidden -->
+      <Frame name="$parentTextOrigin">
+        <Size>
+          <AbsDimension x="1" y="1"/>
+        </Size>
+        <Anchors>
+          <Anchor point="TOPLEFT">
+            <Offset>
+              <AbsDimension x="16" y="-17"/>
+            </Offset>
+          </Anchor>
+        </Anchors>
+      </Frame>
+
+      <!-- Invisible anchor: text right edge when right side is hidden -->
+      <Frame name="$parentTextRightEdge">
+        <Size>
+          <AbsDimension x="1" y="1"/>
+        </Size>
+        <Anchors>
+          <Anchor point="TOPRIGHT">
+            <Offset>
+              <AbsDimension x="-16" y="-17"/>
+            </Offset>
+          </Anchor>
+        </Anchors>
+      </Frame>
+
+      <!-- Close button - bottom aligned -->
+      <Button name="$parentCloseButton" inherits="UIPanelButtonTemplate" text="Close">
+        <Size>
+          <AbsDimension x="80" y="22"/>
+        </Size>
+        <Anchors>
+          <Anchor point="BOTTOM" relativeTo="EreaRpCinematicFrame" relativePoint="BOTTOM">
+            <Offset>
+              <AbsDimension x="0" y="14"/>
+            </Offset>
+          </Anchor>
+        </Anchors>
+        <Scripts>
+          <OnClick>
+            EreaRpCinematicFrame:Hide()
+          </OnClick>
+        </Scripts>
+      </Button>
+    </Frames>
+
+    <Scripts>
+      <OnLoad>
+        this:SetBackdropColor(0, 0, 0, 0.85)
+      </OnLoad>
+    </Scripts>
+  </Frame>
+
+</Ui>

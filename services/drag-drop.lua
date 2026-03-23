@@ -36,7 +36,8 @@ RPPlayerDragDrop = {}
 -- ============================================================================
 -- IMPORTS
 -- ============================================================================
-local inventory = EreaRpLibraries:Inventory()
+local inventory      = EreaRpLibraries:Inventory()
+local objectDatabase = EreaRpLibraries:ObjectDatabase()
 local Log = EreaRpLibraries:Logging("RPPlayer")
 
 -- ============================================================================
@@ -130,7 +131,6 @@ function RPPlayerDragDrop:StopDrag(targetSlot)
             end
 
             if not targetInGroup then
-                DEFAULT_CHAT_FRAME:AddMessage("|cFFFF9900[RP Player]|r You can only trade with people in your group", 1, 0.6, 0)
                 draggedItem = nil
                 dragSourceSlot = nil
                 return
@@ -150,19 +150,63 @@ function RPPlayerDragDrop:StopDrag(targetSlot)
         end
     end
 
-    -- If we have a target slot (dropped within bag), reorganize
+    -- If we have a target slot (dropped within bag), check for forge or reorganize
     if draggedItem and dragSourceSlot and targetSlot then
         Log("Dropped item in slot " .. targetSlot)
 
-        -- Swap items between source and target slots
-        local sourceItem = inventory.GetItemAtSlot(EreaRpPlayerDB.inventory, dragSourceSlot)
-        local targetItem = inventory.GetItemAtSlot(EreaRpPlayerDB.inventory, targetSlot)
+        local sourceInstance = inventory.GetItemAtSlot(EreaRpPlayerDB.inventory, dragSourceSlot)
+        local targetInstance = inventory.GetItemAtSlot(EreaRpPlayerDB.inventory, targetSlot)
 
-        if sourceItem then
-            sourceItem.slot = targetSlot
+        -- Check if the two items form a recipe (drag-shortcut forge)
+        if sourceInstance and targetInstance then
+            local activeDb = EreaRpPlayerDB.activeDatabaseId
+                             and EreaRpPlayerDB.databases[EreaRpPlayerDB.activeDatabaseId]
+            local activeDbItems = activeDb and activeDb.items or nil
+            local outputItem = activeDbItems and
+                objectDatabase.FindRecipeForPair(sourceInstance.guid, targetInstance.guid, activeDbItems)
+
+            if outputItem then
+                -- Found a recipe — skip reorganization, show forge confirm dialog
+                local sourceItemName = ""
+                local targetItemName = ""
+                if activeDbItems then
+                    for _, def in pairs(activeDbItems) do
+                        if def.guid == sourceInstance.guid then sourceItemName = def.name or "?" end
+                        if def.guid == targetInstance.guid then targetItemName = def.name or "?" end
+                    end
+                end
+
+                local forgeCk = outputItem.recipe.cinematicKey
+                EreaRpPlayer_ForgeOutputGuid      = outputItem.guid
+                EreaRpPlayer_ForgeIngredientSlots = { dragSourceSlot, targetSlot }
+                EreaRpPlayer_ForgeCinematicKey    = (forgeCk and forgeCk ~= "") and forgeCk or nil
+                EreaRpPlayer_ForgeNotifyGm        = outputItem.recipe.notifyGm and true or false
+
+                local discovered = EreaRpPlayerDB.discoveredCombinations
+                                   and EreaRpPlayerDB.discoveredCombinations[outputItem.guid] == true
+                if discovered then
+                    StaticPopupDialogs["EreaRpPlayer_FORGE_CONFIRM"].text = "Combine %s\ninto %s?"
+                    StaticPopup_Show("EreaRpPlayer_FORGE_CONFIRM",
+                        sourceItemName .. " + " .. targetItemName, outputItem.name)
+                else
+                    StaticPopupDialogs["EreaRpPlayer_FORGE_CONFIRM"].text = "Combine %s?"
+                    StaticPopup_Show("EreaRpPlayer_FORGE_CONFIRM",
+                        sourceItemName .. " + " .. targetItemName)
+                end
+
+                -- Clear drag state and return (no reorganization)
+                draggedItem    = nil
+                dragSourceSlot = nil
+                return
+            end
         end
-        if targetItem then
-            targetItem.slot = dragSourceSlot
+
+        -- No recipe found — do normal slot swap
+        if sourceInstance then
+            sourceInstance.slot = targetSlot
+        end
+        if targetInstance then
+            targetInstance.slot = dragSourceSlot
         end
 
         EreaRpPlayer_RefreshBag()

@@ -1,0 +1,155 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/">
+
+	<!-- ============================================================================
+	     log-viewer.xml - Shared Debug Log Viewer Frame
+	     ============================================================================
+	     PURPOSE: Provides a reusable debug log viewer window for all addons
+
+	     FEATURES:
+	       - 600x400 draggable window
+	       - Scrollable EditBox for log content (read-only, copy-paste enabled)
+	       - Clear Log button
+	       - Close button
+
+	     USAGE:
+	       - Created globally as EreaRpLogViewerFrame
+	       - Controlled via turtle-rp-common/presenters/log-viewer.lua
+	       - Call RequireLogViewer() to get presenter functions
+	     ============================================================================ -->
+
+	<Frame name="EreaRpLogViewerFrame" parent="UIParent" enableMouse="true" movable="true" hidden="true">
+		<Size>
+			<AbsDimension x="600" y="400"/>
+		</Size>
+		<Anchors>
+			<Anchor point="CENTER"/>
+		</Anchors>
+
+		<!-- Background -->
+		<Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background"
+		          edgeFile="Interface\DialogFrame\UI-DialogBox-Border"
+		          tile="true">
+			<EdgeSize>
+				<AbsValue val="32"/>
+			</EdgeSize>
+			<TileSize>
+				<AbsValue val="32"/>
+			</TileSize>
+			<BackgroundInsets>
+				<AbsInset left="11" right="12" top="12" bottom="11"/>
+			</BackgroundInsets>
+		</Backdrop>
+
+		<Layers>
+			<Layer level="OVERLAY">
+				<!-- Title -->
+				<FontString name="$parentTitle" inherits="GameFontNormalLarge">
+					<Anchors>
+						<Anchor point="TOP">
+							<Offset>
+								<AbsDimension x="0" y="-15"/>
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</FontString>
+			</Layer>
+		</Layers>
+
+		<Frames>
+			<!-- Draggable Title Bar (invisible, for dragging) -->
+			<Frame name="$parentTitleBar">
+				<Size>
+					<AbsDimension x="0" y="30"/>
+				</Size>
+				<Anchors>
+					<Anchor point="TOPLEFT">
+						<Offset>
+							<AbsDimension x="10" y="-10"/>
+						</Offset>
+					</Anchor>
+					<Anchor point="TOPRIGHT">
+						<Offset>
+							<AbsDimension x="-30" y="-10"/>
+						</Offset>
+					</Anchor>
+				</Anchors>
+				<Scripts>
+					<OnDragStart>
+						EreaRpLogViewerFrame:StartMoving()
+					</OnDragStart>
+					<OnDragStop>
+						EreaRpLogViewerFrame:StopMovingOrSizing()
+					</OnDragStop>
+				</Scripts>
+			</Frame>
+
+			<!-- Close Button -->
+			<Button name="$parentCloseButton" inherits="UIPanelCloseButton">
+				<Anchors>
+					<Anchor point="TOPRIGHT">
+						<Offset>
+							<AbsDimension x="-5" y="-5"/>
+						</Offset>
+					</Anchor>
+				</Anchors>
+			</Button>
+
+			<!-- Scrollable Log Area -->
+			<ScrollFrame name="$parentScrollFrame" inherits="UIPanelScrollFrameTemplate">
+				<Anchors>
+					<Anchor point="TOPLEFT">
+						<Offset>
+							<AbsDimension x="20" y="-50"/>
+						</Offset>
+					</Anchor>
+					<Anchor point="BOTTOMRIGHT">
+						<Offset>
+							<AbsDimension x="-40" y="50"/>
+						</Offset>
+					</Anchor>
+				</Anchors>
+				<ScrollChild>
+					<!-- EditBox for log content (allows copy/paste) -->
+					<EditBox name="$parentEditBox" multiLine="true" autoFocus="false">
+						<Size>
+							<AbsDimension x="520" y="1"/>
+						</Size>
+						<FontString inherits="GameFontNormalSmall"/>
+						<Scripts>
+							<OnEscapePressed>
+								this:ClearFocus()
+							</OnEscapePressed>
+						</Scripts>
+					</EditBox>
+				</ScrollChild>
+			</ScrollFrame>
+
+			<!-- Clear Button -->
+			<Button name="$parentClearButton" inherits="UIPanelButtonTemplate" text="Clear Log">
+				<Size>
+					<AbsDimension x="80" y="22"/>
+				</Size>
+				<Anchors>
+					<Anchor point="BOTTOM">
+						<Offset>
+							<AbsDimension x="0" y="15"/>
+						</Offset>
+					</Anchor>
+				</Anchors>
+			</Button>
+		</Frames>
+
+		<Scripts>
+			<OnLoad>
+				-- Make title bar draggable
+				EreaRpLogViewerFrameTitleBar:EnableMouse(true)
+				EreaRpLogViewerFrameTitleBar:RegisterForDrag("LeftButton")
+
+				-- Set frame strata
+				this:SetFrameStrata("DIALOG")
+				this:SetBackdropColor(0, 0, 0, 1)
+			</OnLoad>
+		</Scripts>
+	</Frame>
+
+</Ui>

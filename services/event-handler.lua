@@ -22,7 +22,7 @@
 --   - messaging module (from turtle-rp-common)
 --   - objectDatabase module (from turtle-rp-common)
 --   - inventory module (from turtle-rp-common)
---   - RPPlayerInventory prototype (from services/inventory.lua)
+--   - EreaRpPlayerInventory prototype (from services/inventory.lua)
 --   - Log function
 --
 -- PATTERN: Prototype service + event-driven architecture
@@ -45,6 +45,8 @@ EreaRpPlayerEventHandler = {}
 local messaging = EreaRpLibraries:Messaging()
 local objectDatabase = EreaRpLibraries:ObjectDatabase()
 local inventory = EreaRpLibraries:Inventory()
+local encoding = EreaRpLibraries:Encoding()
+local unitUtils = EreaRpLibraries:UnitUtils()
 local Log = EreaRpLibraries:Logging("RPPlayer")
 
 -- ============================================================================
@@ -110,21 +112,11 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             return  -- Ignore messages from other addons
         end
 
-        Log("OnEvent triggered - event type: " .. tostring(event))
-        Log("CHAT_MSG_ADDON received - prefix: " .. tostring(prefix) .. ", distribution: " .. tostring(distribution) .. ", sender: " .. tostring(sender))
-        Log("  message length: " .. tostring(string.len(encodedMessage or "")))
-        Log("Message: " .. encodedMessage)
+        Log("RECV from " .. tostring(sender) .. ": " .. tostring(encodedMessage))
 
         -- Parse message using messaging module
         -- Automatically handles Base64 decoding and caret-delimited parsing
         local messageType, parts = messaging.ParseMessage(encodedMessage)
-
-        Log("Message type: " .. tostring(messageType) .. ", parts count: " .. table.getn(parts))
-
-        -- Log all parts for debugging
-        for i = 1, table.getn(parts) do
-            Log("Part " .. i .. ": " .. tostring(parts[i]))
-        end
 
         -- Handle different message types (pattern similar to switch/case)
         if messageType == messaging.MESSAGE_TYPES.DB_SYNC_START then
@@ -132,11 +124,20 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             local messageId = parts[2]
             Log("Received DB_SYNC_START from " .. sender .. " (msgId: " .. messageId .. ")")
 
+            local incomingId   = parts[3]
+            local incomingName = parts[4]
+
+            -- Reject: name is empty
+            if not incomingName or incomingName == "" then
+                Log("DB_SYNC_START rejected: empty database name from " .. sender)
+                return
+            end
+
             -- Initialize chunked sync tracking
             EreaRpPlayer_ChunkedSyncs[messageId] = {
                 metadata = {
-                    id = parts[3],
-                    name = parts[4],
+                    id = incomingId,
+                    name = incomingName,
                     version = tonumber(parts[5]),
                     checksum = parts[6]
                 },
@@ -146,7 +147,7 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
                 sender = sender
             }
 
-            Log("Sync started: " .. parts[4] .. " (total size: " .. parts[7] .. " bytes)")
+            Log("Sync started: " .. incomingName .. " (total size: " .. parts[7] .. " bytes)")
 
         elseif messageType == messaging.MESSAGE_TYPES.DB_SYNC_CHUNK then
             -- Format: DB_SYNC_CHUNK^messageId^chunkIndex^totalChunks^chunkData
@@ -181,47 +182,47 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             end
 
             -- Reassemble the database
-            local syncedDatabase = objectDatabase.ReassembleChunkedSync(EreaRpPlayer_ChunkedSyncs[messageId])
+            local syncedDatabase, reason = objectDatabase.ReassembleChunkedSync(EreaRpPlayer_ChunkedSyncs[messageId])
 
             if syncedDatabase then
-                -- Store synced database in SavedVariables
-                EreaRpPlayerDB.syncedDatabase = syncedDatabase
+                -- Ensure databases table exists (safety guard for pre-migration SavedVariables)
+                if not EreaRpPlayerDB.databases then
+                    EreaRpPlayerDB.databases  = {}
+                    EreaRpPlayerDB.inventories = {}
+                    Log("WARNING: EreaRpPlayerDB.databases was nil at sync time — reinitialised")
+                end
 
-                -- Update sync state metadata
-                EreaRpPlayerDB.syncState = {
-                    databaseId = syncedDatabase.metadata.id,
-                    databaseName = syncedDatabase.metadata.name,
-                    version = syncedDatabase.metadata.version,
-                    checksum = syncedDatabase.metadata.checksum,
-                    lastSyncTime = time()
-                }
+                -- Store in multi-tenant databases table
+                local dbId = syncedDatabase.metadata.id
+                syncedDatabase.metadata.lastSyncTime = time()
+                EreaRpPlayerDB.databases[dbId] = syncedDatabase
 
                 -- Count items (hash table indexed by ID)
                 local itemCount = 0
                 for _ in pairs(syncedDatabase.items) do
                     itemCount = itemCount + 1
                 end
-                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF00FF00[RP Player]|r Database synced from %s: '%s' (%d items)",
-                    sender, syncedDatabase.metadata.name, itemCount), 0, 1, 0)
                 Log("Database synced successfully: " .. syncedDatabase.metadata.name .. " (" .. itemCount .. " items)")
 
-                -- Refresh bag UI to show database name
-                RPPlayerInventory:RefreshBag()
+                -- Activate this database (updates syncState + refreshes bag)
+                EreaRpPlayer_SetActiveDatabase(dbId)
 
                 -- Clean up chunked sync data
                 EreaRpPlayer_ChunkedSyncs[messageId] = nil
             else
-                DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Failed to reassemble database sync from " .. sender, 1, 0, 0)
-                Log("ERROR: Failed to reassemble DB_SYNC chunks")
+                local errMsg = reason or "unknown"
+                Log("ERROR: ReassembleChunkedSync failed: " .. errMsg)
+                EreaRpPlayer_ChunkedSyncs[messageId] = nil
             end
 
         elseif messageType == messaging.MESSAGE_TYPES.GIVE then
-            -- FORMAT v0.1.1: GIVE^targetName^itemGuid^customMessage^customText^customNumber
+            -- FORMAT v0.2.2: GIVE^targetName^itemGuid^customMessage^customText^customNumber^additionalText
             local targetName = parts[2]
             local itemGuid = parts[3]
             local customMessage = parts[4] or "A Game Master wants to give you an item."
             local customText = parts[5] or ""
             local customNumber = tonumber(parts[6]) or 0
+            local additionalText = parts[7] or ""   -- NEW (v0.2.2): old senders omit this field
             local myName = UnitName("player")
 
             Log("GIVE - Target: " .. tostring(targetName) .. ", GUID: " .. tostring(itemGuid) .. ", MyName: " .. tostring(myName))
@@ -231,16 +232,16 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
                 return
             end
 
-            -- Look up item by GUID in synced database
-            if not EreaRpPlayerDB.syncedDatabase or not EreaRpPlayerDB.syncedDatabase.items then
-                DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r No database synced from GM!", 1, 0, 0)
-                DEFAULT_CHAT_FRAME:AddMessage("|cFFFFAA00[RP Player]|r Ask " .. sender .. " to click 'Sync to Raid' first.", 1, 1, 0)
-                Log("ERROR: No synced database to look up item GUID: " .. itemGuid .. " from " .. sender)
+            -- Look up item by GUID in active database
+            local activeDb = EreaRpPlayerDB.activeDatabaseId
+                             and EreaRpPlayerDB.databases[EreaRpPlayerDB.activeDatabaseId]
+            if not activeDb or not activeDb.items then
+                Log("ERROR: No active database to look up item GUID: " .. itemGuid .. " from " .. sender)
                 return
             end
 
             local objectDef = nil
-            for _, dbItem in pairs(EreaRpPlayerDB.syncedDatabase.items) do
+            for _, dbItem in pairs(activeDb.items) do
                 if dbItem.guid == itemGuid then
                     objectDef = dbItem
                     break
@@ -248,21 +249,18 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             end
 
             if not objectDef then
-                DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Item not found in database!", 1, 0, 0)
-                DEFAULT_CHAT_FRAME:AddMessage("|cFFFFAA00[RP Player]|r Ask " .. sender .. " to click 'Sync to Raid' to update your database.", 1, 1, 0)
-                Log("ERROR: Item GUID not found in synced database: " .. itemGuid .. " (database: " .. tostring(EreaRpPlayerDB.syncState.databaseName) .. ")")
+                Log("ERROR: Item GUID not found in active database: " .. itemGuid .. " (database: " .. tostring(EreaRpPlayerDB.syncState.databaseName) .. ")")
                 return
             end
 
             -- Check if bag is full
             if inventory.IsBagFull(EreaRpPlayerDB.inventory) then
-                DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Bag is full! Cannot receive item.", 1, 0, 0)
                 Log("Bag is full, cannot receive item: " .. objectDef.name)
                 return
             end
 
-            -- v0.2.1: Create instance data only (minimal storage)
-            local instance = inventory.CreateItemInstance(itemGuid, customText, customNumber)
+            -- v0.2.2: Create instance data only (minimal storage)
+            local instance = inventory.CreateItemInstance(itemGuid, customText, additionalText, customNumber)
 
             -- Store instance + object reference for popup
             EreaRpPlayer_PendingGiveItem = instance
@@ -279,7 +277,7 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             Log("WARNING: Received deprecated GIVE_CONTENT message - ignoring")
 
         elseif messageType == messaging.MESSAGE_TYPES.TRADE then
-            -- FORMAT v0.1.1: TRADE^targetName^objectGuid^customText^customNumber
+            -- FORMAT v0.2.2: TRADE^targetName^objectGuid^customText^customNumber^additionalText
             local targetName = parts[2]
             local myName = UnitName("player")
 
@@ -291,14 +289,17 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
                 return
             end
 
-            local objectGuid = parts[3] or ""
-            local customText = parts[4] or ""
-            local customNumber = tonumber(parts[5]) or 0
+            local objectGuid    = parts[3] or ""
+            local customText    = parts[4] or ""
+            local customNumber  = tonumber(parts[5]) or 0
+            local additionalText = parts[6] or ""
 
-            -- Look up object in syncedDatabase
+            -- Look up object in active database
+            local activeDb = EreaRpPlayerDB.activeDatabaseId
+                             and EreaRpPlayerDB.databases[EreaRpPlayerDB.activeDatabaseId]
             local objectDef = nil
-            if EreaRpPlayerDB.syncedDatabase and EreaRpPlayerDB.syncedDatabase.items then
-                for id, obj in pairs(EreaRpPlayerDB.syncedDatabase.items) do
+            if activeDb and activeDb.items then
+                for id, obj in pairs(activeDb.items) do
                     if obj.guid == objectGuid then
                         objectDef = obj
                         break
@@ -308,14 +309,12 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
 
             if not objectDef then
                 -- Error: object not in database
-                DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Object not found in database!", 1, 0, 0)
-                DEFAULT_CHAT_FRAME:AddMessage("|cFFFFAA00[RP Player]|r Ask GM to 'Sync to Raid' first.", 1, 1, 0)
-                Log("TRADE failed: Object " .. objectGuid .. " not found in syncedDatabase")
+                Log("TRADE failed: Object " .. objectGuid .. " not found in active database")
                 return
             end
 
-            -- v0.2.1: Create instance data only (minimal storage)
-            local instance = inventory.CreateItemInstance(objectGuid, customText, customNumber)
+            -- v0.2.2: Create instance data with additionalText
+            local instance = inventory.CreateItemInstance(objectGuid, customText, additionalText, customNumber)
 
             Log("TRADE complete - Item: " .. tostring(objectDef.name) .. " from " .. sender)
 
@@ -326,7 +325,6 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             Log("TRADE inventory check - Current items: " .. currentCount .. ", Empty slots: " .. emptySlots .. ", IsBagFull: " .. tostring(isFull))
 
             if isFull then
-                DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Bag is full! Cannot accept trade.", 1, 0, 0)
                 Log("Bag is full, cannot accept trade")
                 -- Debug: Log all items with their slots
                 for i, item in ipairs(EreaRpPlayerDB.inventory) do
@@ -364,10 +362,12 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             local customText = parts[4] or ""
             local customNumber = tonumber(parts[5]) or 0
 
-            -- Look up object in syncedDatabase
+            -- Look up object in active database
+            local activeDb = EreaRpPlayerDB.activeDatabaseId
+                             and EreaRpPlayerDB.databases[EreaRpPlayerDB.activeDatabaseId]
             local objectDef = nil
-            if EreaRpPlayerDB.syncedDatabase and EreaRpPlayerDB.syncedDatabase.items then
-                for id, obj in pairs(EreaRpPlayerDB.syncedDatabase.items) do
+            if activeDb and activeDb.items then
+                for id, obj in pairs(activeDb.items) do
                     if obj.guid == objectGuid then
                         objectDef = obj
                         break
@@ -377,9 +377,7 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
 
             if not objectDef then
                 -- Error: object not in database
-                DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r Object not found in database!", 1, 0, 0)
-                DEFAULT_CHAT_FRAME:AddMessage("|cFFFFAA00[RP Player]|r Ask GM to 'Sync to Raid' first.", 1, 1, 0)
-                Log("SHOW failed: Object " .. objectGuid .. " not found in syncedDatabase")
+                Log("SHOW failed: Object " .. objectGuid .. " not found in active database")
                 return
             end
 
@@ -411,10 +409,9 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             Log("WARNING: Received deprecated SHOW_CONTENT message - ignoring")
 
         elseif messageType == messaging.MESSAGE_TYPES.SHOW_REJECT then
-            -- Format: SHOW_REJECT^targetName^rejecterName^itemName
+            -- Format: SHOW_REJECT^targetName^itemName — sender (rejecter) from arg4
             local targetName = parts[2]
-            local rejecterName = parts[3]
-            local itemName = parts[4]
+            local itemName = parts[3]
             local myName = UnitName("player")
 
             -- Check if message is for me
@@ -423,16 +420,12 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
                 return
             end
 
-            Log("SHOW_REJECT received from " .. rejecterName .. " for item: " .. tostring(itemName))
-
-            -- Display rejection message to the shower
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFFFF0000[RP Player]|r %s rejected to view '%s'", rejecterName, itemName), 1, 0.5, 0)
+            Log("SHOW_REJECT received from " .. sender .. " for item: " .. tostring(itemName))
 
         elseif messageType == messaging.MESSAGE_TYPES.TRADE_ACCEPT then
-            -- Format: TRADE_ACCEPT^senderName^receiverName^itemName
+            -- Format: TRADE_ACCEPT^targetName^itemName — sender (accepter) from arg4
             local targetName = parts[2]
-            local accepterName = parts[3]
-            local itemName = parts[4]
+            local itemName = parts[3]
             local myName = UnitName("player")
 
             -- Check if message is for me
@@ -441,10 +434,7 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
                 return
             end
 
-            Log("TRADE_ACCEPT received from " .. accepterName .. " for item: " .. tostring(itemName))
-
-            -- Display acceptance message
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF00FF00[RP Player]|r %s accepted your gift: '%s'", accepterName, itemName), 0, 1, 0)
+            Log("TRADE_ACCEPT received from " .. sender .. " for item: " .. tostring(itemName))
 
             -- Remove pending outgoing trade if exists
             if EreaRpPlayer_PendingOutgoingTrade then
@@ -461,18 +451,17 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
                         local afterCount = table.getn(EreaRpPlayerDB.inventory)
                         Log("TRADE_ACCEPT (outgoing): After removing item - inventory count: " .. afterCount .. " (removed slot " .. tostring(invItem.slot) .. ", guid: " .. tostring(invItem.guid) .. ")")
 
-                        RPPlayerInventory:RefreshBag()
+                        EreaRpPlayerInventory:RefreshBag()
                         break
                     end
                 end
                 EreaRpPlayer_PendingOutgoingTrade = nil
             end
 
-        elseif messageType == "TRADE_REJECT" then
-            -- Format: TRADE_REJECT^senderName^receiverName^itemName
+        elseif messageType == messaging.MESSAGE_TYPES.TRADE_REJECT then
+            -- Format: TRADE_REJECT^targetName^itemName — sender (rejecter) from arg4
             local targetName = parts[2]
-            local rejecterName = parts[3]
-            local itemName = parts[4]
+            local itemName = parts[3]
             local myName = UnitName("player")
 
             -- Check if message is for me
@@ -481,13 +470,176 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
                 return
             end
 
-            Log("TRADE_REJECT received from " .. rejecterName .. " for item: " .. tostring(itemName))
-
-            -- Display rejection message
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFFFF0000[RP Player]|r %s declined your gift: '%s'", rejecterName, itemName), 1, 0.5, 0)
+            Log("TRADE_REJECT received from " .. sender .. " for item: " .. tostring(itemName))
 
             -- Clear pending outgoing trade (item stays in inventory)
             EreaRpPlayer_PendingOutgoingTrade = nil
+
+        elseif messageType == messaging.MESSAGE_TYPES.CINEMATIC then
+            -- Format: CINEMATIC^cinematicGuid^senderName^customText^additionalText^customNumber^[sv1]^...
+            -- senderName may be comma-separated for merge cinematics (e.g. "PlayerA,PlayerB")
+            -- speakerName is looked up from cinematicLibrary (not on wire)
+            local cinematicGuid  = parts[2] or ""
+            local senderName     = parts[3] or sender
+            local customText     = parts[4] or ""
+            local additionalText = parts[5] or ""
+            local customNumber   = tonumber(parts[6]) or 0
+
+            -- Extract script values (all parts after index 6)
+            local scriptValues = {}
+            for i = 7, table.getn(parts) do
+                table.insert(scriptValues, parts[i])
+            end
+
+            -- Build natural-language list from comma-separated senders (e.g. "A,B,C" → "A, B and C")
+            -- Lua 5.0: use string.gfind instead of string.gmatch
+            local function BuildNaturalLanguageList(commaSeparated)
+                local names = {}
+                for name in string.gfind(commaSeparated, "([^,]+)") do
+                    table.insert(names, name)
+                end
+                local count = table.getn(names)
+                if count == 0 then return "" end
+                if count == 1 then return names[1] end
+                local result = names[1]
+                for i = 2, count - 1 do
+                    result = result .. ", " .. names[i]
+                end
+                return result .. " and " .. names[count]
+            end
+
+            local playerNameList = BuildNaturalLanguageList(senderName)
+
+            Log("CINEMATIC received cinematicGuid=" .. tostring(cinematicGuid) .. " from " .. tostring(senderName))
+
+            -- Proximity check: show if ANY sender is nearby (~28 yards)
+            -- Supports comma-separated sender list for merge cinematics
+            local inRange = false
+            -- Lua 5.0: use string.gfind instead of string.gmatch
+            for name in string.gfind(senderName, "([^,]+)") do
+                if unitUtils.CheckPlayerInRangeInspect(name) then
+                    inRange = true
+                    break
+                end
+            end
+
+            if not inRange then
+                Log("Cinematic not shown: no sender in range (" .. senderName .. ")")
+            else
+                -- Look up cinematic from active database
+                local cinematic = nil
+                local activeDb = EreaRpPlayerDB.activeDatabaseId
+                                 and EreaRpPlayerDB.databases[EreaRpPlayerDB.activeDatabaseId]
+                if activeDb and activeDb.cinematicLibrary then
+                    cinematic = activeDb.cinematicLibrary[cinematicGuid]
+                end
+
+                local dialogueText = ""
+
+                if cinematic then
+                    -- Resolve placeholders in message template
+                    dialogueText = cinematic.messageTemplate or ""
+                    -- Apply item placeholders first ({custom-text}, {additional-text}, {item-counter}, {player-name})
+                    dialogueText = objectDatabase.ApplyItemPlaceholders(dialogueText, customText, additionalText, customNumber, playerNameList)
+                    dialogueText = string.gsub(dialogueText, "{playerName}", playerNameList)
+                    dialogueText = string.gsub(dialogueText, "{customText}", customText)
+                    
+                    -- Replace {script:XXX} placeholders with received script values
+                    -- Use explicit scriptReferences field if available
+                    local valueIndex = 1
+                    if cinematic.scriptReferences and cinematic.scriptReferences ~= "" then
+                        -- Parse comma-separated script names (Lua 5.0 compatible)
+                        local i = 1
+                        while i <= string.len(cinematic.scriptReferences) do
+                            local start_name, end_name = string.find(cinematic.scriptReferences, ",", i, true)
+                            if start_name then
+                                local scriptName = string.sub(cinematic.scriptReferences, i, start_name - 1)
+                                local placeholder = "{script:" .. scriptName .. "}"
+                                if scriptValues and scriptValues[valueIndex] then
+                                    dialogueText = string.gsub(dialogueText, placeholder, scriptValues[valueIndex], 1)
+                                end
+                                valueIndex = valueIndex + 1
+                                i = end_name + 1
+                            else
+                                -- Last script name
+                                local scriptName = string.sub(cinematic.scriptReferences, i)
+                                local placeholder = "{script:" .. scriptName .. "}"
+                                if scriptValues and scriptValues[valueIndex] then
+                                    dialogueText = string.gsub(dialogueText, placeholder, scriptValues[valueIndex], 1)
+                                end
+                                break
+                            end
+                        end
+                    else
+                        -- Fallback: extract from message template for backward compatibility
+                        local valueIndex = 1
+                        local i = 1
+                        while i <= string.len(dialogueText) do
+                            local start_script, end_script = string.find(dialogueText, "{script:", i, true)
+                            if start_script then
+                                local start_name = end_script + 1
+                                local end_name = string.find(dialogueText, "}", start_name, true)
+                                if end_name then
+                                    local scriptName = string.sub(dialogueText, start_name, end_name - 1)
+                                    local placeholder = "{script:" .. scriptName .. "}"
+                                    if scriptValues and scriptValues[valueIndex] then
+                                        dialogueText = string.gsub(dialogueText, placeholder, scriptValues[valueIndex], 1)
+                                    end
+                                    valueIndex = valueIndex + 1
+                                    i = end_name + 1
+                                else
+                                    break
+                                end
+                            else
+                                break
+                            end
+                        end
+                    end
+                    
+                    Log("CINEMATIC: resolved from library")
+                else
+                    -- Fallback: use customText as raw dialogue text
+                    dialogueText = customText
+                    Log("CINEMATIC: cinematicGuid not found in library, using customText as fallback")
+                end
+
+                -- Build config objects for left/right sides
+                local leftConfig = nil
+                local rightConfig = nil
+
+                if cinematic and cinematic.leftType then
+                    -- New format: build configs from stored fields
+                    leftConfig = {
+                        type = cinematic.leftType or "none",
+                        portraitUnit = cinematic.leftPortraitUnit or "player",
+                        animationKey = cinematic.leftAnimationKey or "",
+                        loopMode = cinematic.leftLoopMode or "pingpong"
+                    }
+                    rightConfig = {
+                        type = cinematic.rightType or "none",
+                        portraitUnit = cinematic.rightPortraitUnit or "player",
+                        animationKey = cinematic.rightAnimationKey or "",
+                        loopMode = cinematic.rightLoopMode or "pingpong"
+                    }
+                    Log("CINEMATIC: new format, left=" .. tostring(cinematic.leftType) .. " right=" .. tostring(cinematic.rightType))
+                else
+                    -- Old format backward compat: portrait left, animation right
+                    leftConfig = { type = "portrait", portraitUnit = "player" }
+                    local animKey = cinematic and cinematic.animationKey or ""
+                    if animKey ~= "" then
+                        rightConfig = { type = "animation", animationKey = animKey }
+                    else
+                        rightConfig = { type = "none" }
+                    end
+                    Log("CINEMATIC: legacy format, anim=" .. tostring(animKey))
+                end
+
+                -- Look up speakerName from library and resolve placeholders
+                local resolvedSpeaker = objectDatabase.ApplyItemPlaceholders(
+                    cinematic and cinematic.speakerName or "",
+                    customText, additionalText, customNumber, playerNameList)
+                EreaRpCinematicFrame:ShowDialogue(senderName, resolvedSpeaker, dialogueText, leftConfig, rightConfig)
+            end
 
         elseif messageType == messaging.MESSAGE_TYPES.STATUS_REQUEST then
             -- Format: STATUS_REQUEST^requestId
@@ -511,25 +663,43 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             end
             local syncStateEncoded = encoding.Base64Encode(syncStateStr)
 
-            -- Encode inventory (16 slots, GUIDs only)
-            local inventoryGuids = {}
+            -- Encode inventory (16 slots: guid~base64(customText)~customNumber per slot)
+            local inventorySlots = {}
             for i = 1, 16 do
                 local item = EreaRpPlayerDB.inventory and EreaRpPlayerDB.inventory[i]
                 if item and item.guid then
-                    inventoryGuids[i] = item.guid
+                    local ct = encoding.Base64Encode(item.customText or "")
+                    local cn = tostring(item.customNumber or 0)
+                    inventorySlots[i] = item.guid .. "~" .. ct .. "~" .. cn
                 else
-                    inventoryGuids[i] = ""
+                    inventorySlots[i] = ""
                 end
             end
-            local inventoryStr = table.concat(inventoryGuids, "^")
+            local inventoryStr = table.concat(inventorySlots, "^")
             local inventoryEncoded = encoding.Base64Encode(inventoryStr)
+
+            -- Encode location: zone name + map coordinates
+            local zoneName = GetRealZoneText() or ""
+            local playerX, playerY = GetPlayerMapPosition("player")
+            local locationStr = zoneName .. "^" ..
+                string.format("%.1f", playerX * 100) .. "^" ..
+                string.format("%.1f", playerY * 100)
+            local locationEncoded = encoding.Base64Encode(locationStr)
+
+            -- Encode registered extensions (comma-separated addon names)
+            local cinematicAnims = EreaRpLibraries:CinematicAnimations()
+            local extList = cinematicAnims.GetRegisteredExtensions()
+            local extensionsStr = table.concat(extList, ",")
+            local extensionsEncoded = encoding.Base64Encode(extensionsStr)
 
             -- Build response message
             local responseMsg = messaging.MESSAGE_TYPES.STATUS_RESPONSE .. "^" ..
                                requestId .. "^" ..
                                playerVersion .. "^" ..
                                syncStateEncoded .. "^" ..
-                               inventoryEncoded
+                               inventoryEncoded .. "^" ..
+                               locationEncoded .. "^" ..
+                               extensionsEncoded
 
             -- Send response
             local distribution = "RAID"
@@ -539,35 +709,90 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             SendAddonMessage(ADDON_PREFIX, responseMsg, distribution)
 
             Log("STATUS_RESPONSE sent (reqId: " .. tostring(requestId) .. ")")
+
+        elseif messageType == messaging.MESSAGE_TYPES.SCRIPT_REQUEST then
+            -- Format: SCRIPT_REQUEST^playerName^scriptName^requestId
+            local targetName = parts[2]
+            local scriptName = parts[3]
+            local requestId  = parts[4]
+            local myName = UnitName("player")
+
+            Log("SCRIPT_REQUEST received: target=" .. tostring(targetName) .. " script=" .. tostring(scriptName) .. " reqId=" .. tostring(requestId))
+
+            -- Check if message is for me
+            if targetName ~= myName then
+                Log("SCRIPT_REQUEST not for me")
+                return
+            end
+
+            -- Look up script in active database
+            local activeDb = EreaRpPlayerDB.activeDatabaseId
+                             and EreaRpPlayerDB.databases[EreaRpPlayerDB.activeDatabaseId]
+            local scriptDef = nil
+            if activeDb and activeDb.scriptLibrary then
+                scriptDef = activeDb.scriptLibrary[scriptName]
+            end
+
+            if not scriptDef then
+                Log("SCRIPT_REQUEST: script not found: " .. tostring(scriptName))
+                messaging.SendScriptResultMessage(requestId, "Error: script not found")
+                return
+            end
+
+            -- Execute in sandbox
+            local fn, compileErr = loadstring(scriptDef.body)
+            if not fn then
+                Log("SCRIPT_REQUEST: compile error: " .. tostring(compileErr))
+                messaging.SendScriptResultMessage(requestId, "Compile error: " .. tostring(compileErr))
+                return
+            end
+
+            -- Build sandbox environment
+            local env = {
+                string = string, math = math, table = table,
+                tostring = tostring, tonumber = tonumber, type = type,
+                pairs = pairs, ipairs = ipairs, unpack = unpack,
+                UnitName = UnitName, UnitClass = UnitClass, UnitLevel = UnitLevel,
+                UnitRace = UnitRace, UnitSex = UnitSex,
+                GetTime = GetTime, date = date, random = math.random,
+                GetRealZoneText = GetRealZoneText, GetZoneText = GetZoneText,
+                GetSubZoneText = GetSubZoneText,
+                GetPlayerMapPosition = GetPlayerMapPosition,
+                GetNumRaidMembers = GetNumRaidMembers, GetNumPartyMembers = GetNumPartyMembers,
+                UnitIsConnected = UnitIsConnected, UnitIsDeadOrGhost = UnitIsDeadOrGhost,
+                player = myName
+            }
+            setfenv(fn, env)
+
+            local ok, result = pcall(fn)
+            if not ok then
+                Log("SCRIPT_REQUEST: runtime error: " .. tostring(result))
+                messaging.SendScriptResultMessage(requestId, "Runtime error: " .. tostring(result))
+                return
+            end
+
+            local resultStr = tostring(result or "nil")
+            Log("SCRIPT_REQUEST: result=" .. resultStr)
+            messaging.SendScriptResultMessage(requestId, resultStr)
         end
 
     elseif event == "PLAYER_LOGIN" then
+        -- Clear log at session start in production builds (RP_PRODUCTION_BUILD set by build.ps1)
+        if RP_PRODUCTION_BUILD then
+            _G["RPPlayerDebugLog"] = {}
+        end
         Log("PLAYER_LOGIN event fired")
-
-        -- This event fires once after SavedVariables are loaded
-        DEFAULT_CHAT_FRAME:AddMessage("|cFFFFD700[RP Player] Version: " .. ADDON_VERSION .. "|r")
-        DEFAULT_CHAT_FRAME:AddMessage("|cFF00FFFF[RP Player]|r Commands: /rpplayer, /rpplayer log, /rpplayer clean", 0, 1, 1)
-        Log("Version message displayed")
 
         -- Check if EreaRpPlayerDB exists
         if EreaRpPlayerDB then
             Log("EreaRpPlayerDB exists: " .. type(EreaRpPlayerDB))
-            if EreaRpPlayerDB.inventory then
-                Log("EreaRpPlayerDB.inventory exists, count: " .. table.getn(EreaRpPlayerDB.inventory))
-            else
-                Log("EreaRpPlayerDB.inventory is nil!")
-            end
         else
             Log("EreaRpPlayerDB is nil!")
         end
 
-        -- Ensure inventory table exists
-        EreaRpPlayerDB.inventory = EreaRpPlayerDB.inventory or {}
-        Log("After safety check, inventory count: " .. table.getn(EreaRpPlayerDB.inventory))
-
         -- Migrate inventory to v0.1.1 (add customText and customNumber fields)
         local migrated = false
-        for i = 1, table.getn(EreaRpPlayerDB.inventory) do
+        for i = 1, table.getn(EreaRpPlayerDB.inventory or {}) do
             local item = EreaRpPlayerDB.inventory[i]
 
             if not item.customText then
@@ -583,30 +808,21 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
 
         if migrated then
             Log("Inventory migrated to v0.1.1 format")
-            DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00[RP Player]|r Inventory migrated to v0.1.1", 0, 1, 0)
         end
 
-        -- Add welcome item if inventory is empty (first time use)
-        if table.getn(EreaRpPlayerDB.inventory) == 0 then
-            Log("Inventory is empty, creating welcome letter")
-            local welcomeItem = {
-                id = 0,
-                name = "Welcome to RP Player",
-                icon = "Interface\\Icons\\INV_Misc_Note_01",
-                tooltip = "Quick start guide",
-                content = "RP PLAYER GUIDE\n\n" ..
-                    "Left-click items to read. Right-click for options.\n\n" ..
-                    "Drag items to player portraits to give or show.\n\n" ..
-                    "Use /rpplayer to open bag.",
-                guid = "system-welcome-0",
-                customText = "",  -- v0.1.1: Instance-specific text
-                customNumber = 0  -- v0.1.1: Instance-specific number
-            }
-            table.insert(EreaRpPlayerDB.inventory, welcomeItem)
-            Log("Welcome letter inserted, new count: " .. table.getn(EreaRpPlayerDB.inventory))
-            DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00[RP Player]|r Welcome letter added to inventory", 0, 1, 0)
+        -- Check if system-welcome-db inventory is empty and add welcome item if needed
+        local systemDbInventory = EreaRpPlayerDB.inventories["system-welcome-db"] or {}
+        if table.getn(systemDbInventory) == 0 then
+            Log("system-welcome-db inventory is empty, adding system-welcome-0")
+            local welcomeItem = inventory.CreateItemInstance("system-welcome-0", "", "", 0)
+            table.insert(systemDbInventory, welcomeItem)
+            EreaRpPlayerDB.inventories["system-welcome-db"] = systemDbInventory
+            if EreaRpPlayerDB.activeDatabaseId == "system-welcome-db" then
+                EreaRpPlayerDB.inventory = systemDbInventory
+            end
+            Log("Added system-welcome-0 to system-welcome-db inventory")
         else
-            Log("Inventory not empty, count: " .. table.getn(EreaRpPlayerDB.inventory))
+            Log("system-welcome-db inventory already has items")
         end
 
         -- Cleanup duplicate slots before refreshing bag
@@ -614,9 +830,9 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
         EreaRpPlayerEventHandler:CleanupDuplicateSlots()
 
         -- Refresh bag display after initialization
-        Log("Calling RPPlayerInventory:RefreshBag()")
-        RPPlayerInventory:RefreshBag()
-        Log("RPPlayerInventory:RefreshBag() completed")
+        Log("Calling EreaRpPlayerInventory:RefreshBag()")
+        EreaRpPlayerInventory:RefreshBag()
+        Log("EreaRpPlayerInventory:RefreshBag() completed")
 
         -- Unregister this event since we only need to run once per session
         eventFrame:UnregisterEvent("PLAYER_LOGIN")
@@ -638,17 +854,15 @@ function EreaRpPlayerEventHandler:ResetPositions()
     -- Reset read frame
     EreaRpPlayerReadFrame:ClearAllPoints()
     EreaRpPlayerReadFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-
-    DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00[RP Player]|r Frame positions reset to default", 0, 1, 0)
 end
 
 -- ============================================================================
 -- ShowLog - Display debug log viewer using shared log viewer
 -- ============================================================================
--- Uses RPLogViewerFrame from turtle-rp-common (prototype pattern)
+-- Uses EreaRpLogViewerFrame from turtle-rp-common (prototype pattern)
 -- ============================================================================
 function EreaRpPlayerEventHandler:ShowLog()
-    RPLogViewerFrame:ShowLog("RPPlayer")
+    EreaRpLogViewerFrame:ShowLog("RPPlayer")
 end
 
 -- ============================================================================
@@ -659,7 +873,6 @@ end
 -- ============================================================================
 function EreaRpPlayerEventHandler:CleanupDuplicateSlots()
     if not EreaRpPlayerDB or not EreaRpPlayerDB.inventory then
-        DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000[RP Player]|r No inventory to clean")
         return
     end
 
@@ -680,14 +893,14 @@ function EreaRpPlayerEventHandler:CleanupDuplicateSlots()
                     itemName = item.name
                 else
                     -- New format: lookup definition
-                    local fullItem = inventory.GetFullItem(item, EreaRpPlayerDB.syncedDatabase)
+                    local activeDb = EreaRpPlayerDB.activeDatabaseId
+                                     and EreaRpPlayerDB.databases[EreaRpPlayerDB.activeDatabaseId]
+                    local fullItem = inventory.GetFullItem(item, activeDb)
                     if fullItem then
                         itemName = fullItem.name
                     end
                 end
 
-                -- Warn player (orange text)
-                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFFFF9900[RP Player]|r More than one item in slot %d, removed '%s'", item.slot, itemName), 1, 0.6, 0)
                 Log("Cleanup: Removed duplicate item '" .. itemName .. "' from slot " .. item.slot)
             else
                 -- First occurrence - keep it
@@ -704,11 +917,9 @@ function EreaRpPlayerEventHandler:CleanupDuplicateSlots()
     -- Report results
     local removedCount = table.getn(toRemove)
     if removedCount > 0 then
-        DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF00FF00[RP Player]|r Cleanup complete: removed %d duplicate item(s)", removedCount), 0, 1, 0)
         Log("Cleanup complete: removed " .. removedCount .. " duplicates")
-        RPPlayerInventory:RefreshBag()
+        EreaRpPlayerInventory:RefreshBag()
     else
-        DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00[RP Player]|r No duplicates found", 0, 1, 0)
         Log("Cleanup: No duplicates found")
     end
 end
@@ -724,7 +935,7 @@ SlashCmdList["RPPLAYER"] = function(msg)
 
     -- Handle clearlog command
     if msg == "clearlog" then
-        RPLogViewerFrame:ClearLog("RPPlayer")
+        EreaRpLogViewerFrame:ClearLog("RPPlayer")
         return
     end
 
@@ -746,6 +957,6 @@ SlashCmdList["RPPLAYER"] = function(msg)
     else
         Log("Opening bag via slash command")
         EreaRpPlayerBagFrame:Show()
-        RPPlayerInventory:RefreshBag()
+        EreaRpPlayerInventory:RefreshBag()
     end
 end

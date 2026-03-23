@@ -1,0 +1,27 @@
+-- ============================================================================
+-- core.lua - EreaRpLibraries Namespace
+-- ============================================================================
+-- PURPOSE: Provides a single global namespace for all library factory functions
+--
+-- PATTERN: Namespace with factory methods
+--
+-- USAGE:
+--   local Log = EreaRpLibraries:Logging("RPMaster")
+--   local messaging = EreaRpLibraries:Messaging()
+--   local inventory = EreaRpLibraries:Inventory()
+--
+-- WHY NAMESPACE:
+--   - Single global variable instead of multiple RequireX() functions
+--   - Prevents global namespace pollution
+--   - More discoverable API (all libraries under one roof)
+--   - Keeps factory pattern for configuration (e.g., Logging needs addon name)
+--
+-- BENEFITS:
+--   - Safer: Only one global variable (EreaRpLibraries)
+--   - Clearer intent: All Erea libraries in one place
+--   - Factory pattern preserved: Configuration at initialization
+--   - Lazy loading: Libraries initialized on demand
+-- ============================================================================
+
+-- Create global namespace
+EreaRpLibraries = {}

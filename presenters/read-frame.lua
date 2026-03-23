@@ -78,21 +78,27 @@ function EreaRpPlayerReadFrame:ShowItem(item, shownBy)
         self.icon:SetTexture("Interface\Icons\INV_Misc_QuestionMark")
     end
     
-    -- Set item name
-    self.itemName:SetText(item.name or "Unknown Item")
-    
-    -- Set description/tooltip
+    -- Set item name (apply placeholder substitution)
+    self.itemName:SetText(objectDatabase.ApplyItemPlaceholders(
+        item.name or "Unknown Item", item.customText, item.additionalText, item.customNumber))
+
+    -- Set description/tooltip (apply placeholder substitution)
     if item.tooltip and item.tooltip ~= "" then
-        self.itemDesc:SetText(item.tooltip)
+        self.itemDesc:SetText(objectDatabase.ApplyItemPlaceholders(
+            item.tooltip, item.customText, item.additionalText, item.customNumber))
     else
         self.itemDesc:SetText("")
     end
-    
+
     -- Set content text (business logic delegated to objectDatabase.RenderItemContent)
+    local activeDb = EreaRpPlayerDB.activeDatabaseId
+                     and EreaRpPlayerDB.databases[EreaRpPlayerDB.activeDatabaseId]
     local displayContent = objectDatabase.RenderItemContent(
         item.guid,
         item.customText,
-        EreaRpPlayerDB.syncedDatabase
+        item.additionalText,
+        item.customNumber,
+        activeDb
     )
     self.text:SetText(displayContent)
 
