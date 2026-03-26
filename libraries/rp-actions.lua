@@ -109,7 +109,7 @@ local METHOD_REGISTRY = {
             end
 
             -- Resolve {custom-text}, {additional-text}, {item-counter}, {player-name} placeholders from source item
-            local customText    = objectDatabase.ApplyItemPlaceholders(params.customText    or "", item.customText, item.additionalText, item.customNumber, playerName)
+            local customText = objectDatabase.ApplyItemPlaceholders(params.customText or "", item.customText, item.additionalText, item.customNumber, playerName)
             local additionalText = objectDatabase.ApplyItemPlaceholders(params.additionalText or "", item.customText, item.additionalText, item.customNumber, playerName)
 
             -- customNumber param may contain {item-counter} — resolve then convert to number

@@ -336,6 +336,7 @@ local function EscapeString(str)
     -- Escape delimiters that we use for serialization
     -- Order matters: escape the escape character first
     local result = string.gsub(tostring(str), "\\", "\\\\")  -- Escape backslash
+    result = string.gsub(result, ":", "\\:")                  -- Escape colon (action part delimiter)
     result = string.gsub(result, "|~|", "\\|\\~\\|")         -- Escape field separator
     result = string.gsub(result, "%^~%^", "\\^\\~\\^")       -- Escape item separator
     result = string.gsub(result, "#~#", "\\#\\~\\#")         -- Escape database separator
@@ -352,6 +353,7 @@ local function UnescapeString(str)
     local result = string.gsub(str, "\\#\\~\\#", "#~#")      -- Unescape database separator
     result = string.gsub(result, "\\%^\\~\\%^", "^~^")       -- Unescape item separator
     result = string.gsub(result, "\\|\\~\\|", "|~|")         -- Unescape field separator
+    result = string.gsub(result, "\\:", ":")                  -- Unescape colon
     result = string.gsub(result, "\\\\", "\\")               -- Unescape backslash
 
     return result
@@ -572,7 +574,10 @@ local function DeserializeItem(serialized)
 
             while i <= len do
                 local char = string.sub(actionStr, i, i)
-                if char == ":" then
+                if char == "\\" and i < len and string.sub(actionStr, i + 1, i + 1) == ":" then
+                    current = current .. "\\:"  -- Keep escaped colon, do not split
+                    i = i + 2
+                elseif char == ":" then
                     table.insert(actionParts, current)
                     current = ""
                     i = i + 1

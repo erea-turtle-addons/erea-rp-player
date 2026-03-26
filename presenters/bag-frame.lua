@@ -127,7 +127,7 @@ function EreaRpPlayerBagFrame:CreateItemSlots()
 
         -- Counter text (like WoW's item count display)
         local count = slot:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-        count:SetPoint("BOTTOMRIGHT", slot, "BOTTOMRIGHT", -2, 2)
+        count:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
         count:SetJustifyH("RIGHT")
         count:Hide()
         slot.count = count

@@ -421,6 +421,7 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             end
 
             Log("SHOW_REJECT received from " .. sender .. " for item: " .. tostring(itemName))
+            DEFAULT_CHAT_FRAME:AddMessage("|cFFFFD700[RP]|r " .. sender .. " refused to look at |cFFFFFFFF" .. tostring(itemName) .. "|r.")
 
         elseif messageType == messaging.MESSAGE_TYPES.TRADE_ACCEPT then
             -- Format: TRADE_ACCEPT^targetName^itemName — sender (accepter) from arg4
@@ -471,6 +472,7 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             end
 
             Log("TRADE_REJECT received from " .. sender .. " for item: " .. tostring(itemName))
+            DEFAULT_CHAT_FRAME:AddMessage("|cFFFFD700[RP]|r " .. sender .. " refused the trade for |cFFFFFFFF" .. tostring(itemName) .. "|r.")
 
             -- Clear pending outgoing trade (item stays in inventory)
             EreaRpPlayer_PendingOutgoingTrade = nil
