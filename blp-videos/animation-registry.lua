@@ -53,6 +53,10 @@ EreaRpAnimationRegistry = {
         texture = "Interface\\AddOns\\erea-rp-player\\blp-videos\\Moonstone_compass",
         cols = 4, rows = 4, totalFrames = 16, fps = 8
     },
+    obsidian = {
+        texture = "Interface\\AddOns\\erea-rp-player\\blp-videos\\Obsidian",
+        cols = 4, rows = 4, totalFrames = 16, fps = 8
+    },
     pie_splat = {
         texture = "Interface\\AddOns\\erea-rp-player\\blp-videos\\Pie_splat",
         cols = 4, rows = 4, totalFrames = 16, fps = 8
