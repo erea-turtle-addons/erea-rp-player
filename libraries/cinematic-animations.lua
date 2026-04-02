@@ -39,7 +39,9 @@ local _registeredExtensions = {}
 -- ============================================================================
 local function GetAnimation(key)
     if not key or key == "" then return nil end
-    return ANIMATION_REGISTRY[key]
+    local entry = ANIMATION_REGISTRY[key]
+    if type(entry) == "table" and entry.cols then return entry end
+    return nil
 end
 
 -- ============================================================================
@@ -49,9 +51,11 @@ end
 -- ============================================================================
 local function GetAnimationList()
     local list = {}
-    for key, _ in pairs(ANIMATION_REGISTRY) do
-        local label = string.gsub(key, "_", " ")
-        table.insert(list, { key = key, label = label })
+    for key, entry in pairs(ANIMATION_REGISTRY) do
+        if type(entry) == "table" and entry.cols then
+            local label = string.gsub(key, "_", " ")
+            table.insert(list, { key = key, label = label })
+        end
     end
     -- Sort alphabetically by key
     table.sort(list, function(a, b) return a.key < b.key end)
