@@ -81,6 +81,7 @@ function EreaRpPlayerBagFrame:Initialize()
 
     -- Populate dropdown with current active database (if any)
     self:UpdateDatabaseLabel()
+
 end
 
 -- ============================================================================

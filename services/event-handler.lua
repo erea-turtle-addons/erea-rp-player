@@ -694,6 +694,9 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
             local extensionsStr = table.concat(extList, ",")
             local extensionsEncoded = encoding.Base64Encode(extensionsStr)
 
+            -- Character type: "NPC" if erea-rp-npc addon is loaded, "PC" otherwise
+            local charType = IsAddOnLoaded("erea-rp-npc") and "NPC" or "PC"
+
             -- Build response message
             local responseMsg = messaging.MESSAGE_TYPES.STATUS_RESPONSE .. "^" ..
                                requestId .. "^" ..
@@ -701,7 +704,8 @@ eventFrame:SetScript("OnEvent", function()  -- Event handler callback
                                syncStateEncoded .. "^" ..
                                inventoryEncoded .. "^" ..
                                locationEncoded .. "^" ..
-                               extensionsEncoded
+                               extensionsEncoded .. "^" ..
+                               charType
 
             -- Send response
             local distribution = "RAID"

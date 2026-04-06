@@ -72,7 +72,20 @@ local MESSAGE_TYPES = {
     SCRIPT_RESULT = "SCRIPT_RESULT",     -- Player -> GM
 
     -- Lightweight status update (Player -> GM)
-    STATUS_LITE = "STATUS_LITE"
+    STATUS_LITE = "STATUS_LITE",
+
+    -- NPC puppet commands (GM -> NPC)
+    NPC_CMD    = "NPC_CMD",     -- Single-line say/yell/emote
+    NPC_SCRIPT = "NPC_SCRIPT",  -- Multi-line scripted sequence
+    NPC_STOP   = "NPC_STOP",    -- Abort running script
+
+    -- NPC chat relay (NPC -> GM)
+    NPC_CHAT_RELAY = "NPC_CHAT_RELAY",  -- Nearby chat heard by NPC
+
+    -- Action-triggered NPC/GM commands (Player -> GM -> NPC)
+    NPC_ACTION_TRIGGER = "NPC_ACTION_TRIGGER",  -- Player -> GM: tag-based NPC chat
+    WHISPER_TRIGGER    = "WHISPER_TRIGGER",      -- Player -> GM: whisper to player
+    NPC_CMD_RANGED     = "NPC_CMD_RANGED"        -- GM -> NPC: cmd with range check
 }
 
 -- ============================================================================
@@ -649,58 +662,228 @@ local function SendStatusLiteMessage()
 end
 
 -- ============================================================================
+-- NPC PUPPET SEND FUNCTIONS (GM -> NPC)
+-- ============================================================================
+
+-- ============================================================================
+-- SendNpcCmdMessage - GM sends a single say/yell/emote to an NPC
+-- ============================================================================
+-- @param targetName: NPC character name
+-- @param cmdType:   "say" | "yell" | "emote"
+-- @param text:      The line to deliver
+-- @returns: success boolean
+--
+-- FORMAT: "NPC_CMD^targetName^cmdType^text"
+-- NOTE: Plain (not Base64) — text must not contain ^ (single chat line, safe)
+-- ============================================================================
+local function SendNpcCmdMessage(targetName, cmdType, text)
+    if not targetName or not cmdType or not text then return false end
+
+    local message = MESSAGE_TYPES.NPC_CMD .. MESSAGE_DELIMITER ..
+                    targetName .. MESSAGE_DELIMITER ..
+                    cmdType .. MESSAGE_DELIMITER ..
+                    text
+
+    SendAddonMessage(ADDON_PREFIX, message, GetDistribution(targetName))
+    return true
+end
+
+-- ============================================================================
+-- SendNpcScriptMessage - GM sends a multi-line script to an NPC
+-- ============================================================================
+-- @param targetName: NPC character name
+-- @param scriptBody: Full script text (may contain ^ so whole message is Base64)
+-- @returns: success boolean
+--
+-- FORMAT: Base64("NPC_SCRIPT^targetName^scriptBody")
+-- ============================================================================
+local function SendNpcScriptMessage(targetName, scriptBody)
+    if not targetName then return false end
+
+    local raw = MESSAGE_TYPES.NPC_SCRIPT .. MESSAGE_DELIMITER ..
+                targetName .. MESSAGE_DELIMITER ..
+                (scriptBody or "")
+    local message = encoding.Base64Encode(raw)
+
+    SendAddonMessage(ADDON_PREFIX, message, GetDistribution(targetName))
+    return true
+end
+
+-- ============================================================================
+-- SendNpcStopMessage - GM aborts the currently running NPC script
+-- ============================================================================
+-- @param targetName: NPC character name
+-- @returns: success boolean
+--
+-- FORMAT: "NPC_STOP^targetName"
+-- ============================================================================
+local function SendNpcStopMessage(targetName)
+    if not targetName then return false end
+
+    local message = MESSAGE_TYPES.NPC_STOP .. MESSAGE_DELIMITER .. targetName
+
+    SendAddonMessage(ADDON_PREFIX, message, GetDistribution(targetName))
+    return true
+end
+
+-- ============================================================================
+-- SendNpcChatRelayMessage - NPC relays nearby chat back to GM
+-- ============================================================================
+-- @param chatType: "SAY", "YELL", or "EMOTE"
+-- @param senderName: Name of the player/NPC who spoke
+-- @param messageText: The chat message content
+-- @returns: success boolean
+--
+-- FORMAT: "NPC_CHAT_RELAY^chatType^senderName^messageText"
+-- ============================================================================
+local function SendNpcChatRelayMessage(chatType, senderName, messageText)
+    if not chatType or not senderName then return false end
+
+    local message = MESSAGE_TYPES.NPC_CHAT_RELAY .. MESSAGE_DELIMITER ..
+                    chatType .. MESSAGE_DELIMITER ..
+                    senderName .. MESSAGE_DELIMITER ..
+                    (messageText or "")
+
+    SendAddonMessage(ADDON_PREFIX, message, GetDistribution())
+    return true
+end
+
+-- ============================================================================
+-- ACTION-TRIGGERED NPC/GM SEND FUNCTIONS (Player -> GM -> NPC)
+-- ============================================================================
+
+-- ============================================================================
+-- SendNpcActionTriggerMessage - Player requests tag-based NPC chat via GM
+-- ============================================================================
+-- @param tag:     NPC tag to match (e.g. "innkeeper", "guard")
+-- @param cmdType: "say" | "yell" | "emote"
+-- @param text:    The line to deliver (placeholders already resolved)
+-- @returns: success boolean
+--
+-- FORMAT: "NPC_ACTION_TRIGGER^tag^cmdType^text"
+-- ============================================================================
+local function SendNpcActionTriggerMessage(tag, cmdType, text)
+    if not tag or not cmdType or not text then return false end
+
+    local message = MESSAGE_TYPES.NPC_ACTION_TRIGGER .. MESSAGE_DELIMITER ..
+                    tag .. MESSAGE_DELIMITER ..
+                    cmdType .. MESSAGE_DELIMITER ..
+                    text
+
+    SendAddonMessage(ADDON_PREFIX, message, GetDistribution())
+    return true
+end
+
+-- ============================================================================
+-- SendWhisperTriggerMessage - Player requests GM to whisper them
+-- ============================================================================
+-- @param text: The whisper text (placeholders already resolved)
+-- @returns: success boolean
+--
+-- FORMAT: Base64("WHISPER_TRIGGER^text")
+-- NOTE: Base64 encoded because text may contain ^
+-- ============================================================================
+local function SendWhisperTriggerMessage(text)
+    if not text then return false end
+
+    local raw = MESSAGE_TYPES.WHISPER_TRIGGER .. MESSAGE_DELIMITER .. text
+    local message = encoding.Base64Encode(raw)
+
+    SendAddonMessage(ADDON_PREFIX, message, GetDistribution())
+    return true
+end
+
+-- ============================================================================
+-- SendNpcCmdRangedMessage - GM sends a range-checked cmd to an NPC
+-- ============================================================================
+-- @param targetName: NPC character name
+-- @param cmdType:    "say" | "yell" | "emote"
+-- @param text:       The line to deliver
+-- @param playerName: Triggering player (NPC checks range before executing)
+-- @returns: success boolean
+--
+-- FORMAT: "NPC_CMD_RANGED^targetName^cmdType^text^playerName"
+-- ============================================================================
+local function SendNpcCmdRangedMessage(targetName, cmdType, text, playerName)
+    if not targetName or not cmdType or not text or not playerName then return false end
+
+    local message = MESSAGE_TYPES.NPC_CMD_RANGED .. MESSAGE_DELIMITER ..
+                    targetName .. MESSAGE_DELIMITER ..
+                    cmdType .. MESSAGE_DELIMITER ..
+                    text .. MESSAGE_DELIMITER ..
+                    playerName
+
+    SendAddonMessage(ADDON_PREFIX, message, GetDistribution(targetName))
+    return true
+end
+
+-- ============================================================================
 -- EXPORT FUNCTIONS
 -- ============================================================================
 
+-- Lua 5.0: 32 upvalue limit per closure — build export table incrementally
+local _messagingExport = {}
+
+-- Constants + distribution
+_messagingExport.ADDON_PREFIX = ADDON_PREFIX
+_messagingExport.MESSAGE_DELIMITER = MESSAGE_DELIMITER
+_messagingExport.MESSAGE_TYPES = MESSAGE_TYPES
+_messagingExport.GetDistribution = GetDistribution
+
+-- SEND functions (complete flow: create + send)
+_messagingExport.SendGiveMessage = SendGiveMessage
+_messagingExport.SendTradeMessage = SendTradeMessage
+_messagingExport.SendShowMessage = SendShowMessage
+_messagingExport.SendGiveAcceptMessage = SendGiveAcceptMessage
+_messagingExport.SendGiveRejectMessage = SendGiveRejectMessage
+_messagingExport.SendTradeAcceptMessage = SendTradeAcceptMessage
+_messagingExport.SendTradeRejectMessage = SendTradeRejectMessage
+_messagingExport.SendShowRejectMessage = SendShowRejectMessage
+
+-- CREATE functions (for advanced use, testing)
+_messagingExport.CreateGiveMessage = CreateGiveMessage
+_messagingExport.CreateTradeMessage = CreateTradeMessage
+_messagingExport.CreateShowMessage = CreateShowMessage
+
+-- Response messages (Player -> GM)
+_messagingExport.CreateGiveAcceptMessage = CreateGiveAcceptMessage
+_messagingExport.CreateGiveRejectMessage = CreateGiveRejectMessage
+_messagingExport.CreateTradeAcceptMessage = CreateTradeAcceptMessage
+_messagingExport.CreateTradeRejectMessage = CreateTradeRejectMessage
+_messagingExport.CreateShowRejectMessage = CreateShowRejectMessage
+
+-- Cinematic messages
+_messagingExport.SendCinematicTriggerMessage = SendCinematicTriggerMessage
+_messagingExport.SendCinematicBroadcastMessage = SendCinematicBroadcastMessage
+_messagingExport.SendMergeTriggerMessage = SendMergeTriggerMessage
+
+-- Script execution messages
+_messagingExport.SendScriptRequestMessage = SendScriptRequestMessage
+_messagingExport.SendScriptResultMessage = SendScriptResultMessage
+
+-- Lightweight status update (Player -> GM)
+_messagingExport.SendStatusLiteMessage = SendStatusLiteMessage
+
+-- NPC puppet commands (GM -> NPC)
+_messagingExport.SendNpcCmdMessage = SendNpcCmdMessage
+_messagingExport.SendNpcScriptMessage = SendNpcScriptMessage
+_messagingExport.SendNpcStopMessage = SendNpcStopMessage
+
+-- NPC chat relay (NPC -> GM)
+_messagingExport.SendNpcChatRelayMessage = SendNpcChatRelayMessage
+
+-- Action-triggered NPC/GM commands (Player -> GM -> NPC)
+_messagingExport.SendNpcActionTriggerMessage = SendNpcActionTriggerMessage
+_messagingExport.SendWhisperTriggerMessage = SendWhisperTriggerMessage
+_messagingExport.SendNpcCmdRangedMessage = SendNpcCmdRangedMessage
+
+-- NOTE: DB sync message creation is in object-database.lua
+-- (CreateSyncMessageChunks, ReassembleChunkedSync)
+
+-- Parsing
+_messagingExport.ParseMessage = ParseMessage
+_messagingExport.ParseCaretDelimited = ParseCaretDelimited
+
 function EreaRpLibraries:Messaging()
-    return {
-        -- Constants
-        ADDON_PREFIX = ADDON_PREFIX,
-        MESSAGE_DELIMITER = MESSAGE_DELIMITER,
-        MESSAGE_TYPES = MESSAGE_TYPES,
-
-        -- Distribution
-        GetDistribution = GetDistribution,
-
-        -- SEND functions (complete flow: create + send)
-        SendGiveMessage = SendGiveMessage,
-        SendTradeMessage = SendTradeMessage,
-        SendShowMessage = SendShowMessage,
-        SendGiveAcceptMessage = SendGiveAcceptMessage,
-        SendGiveRejectMessage = SendGiveRejectMessage,
-        SendTradeAcceptMessage = SendTradeAcceptMessage,
-        SendTradeRejectMessage = SendTradeRejectMessage,
-        SendShowRejectMessage = SendShowRejectMessage,
-
-        -- CREATE functions (for advanced use, testing)
-        CreateGiveMessage = CreateGiveMessage,
-        CreateTradeMessage = CreateTradeMessage,
-        CreateShowMessage = CreateShowMessage,
-
-        -- Response messages (Player -> GM)
-        CreateGiveAcceptMessage = CreateGiveAcceptMessage,
-        CreateGiveRejectMessage = CreateGiveRejectMessage,
-        CreateTradeAcceptMessage = CreateTradeAcceptMessage,
-        CreateTradeRejectMessage = CreateTradeRejectMessage,
-        CreateShowRejectMessage = CreateShowRejectMessage,
-
-        -- Cinematic messages
-        SendCinematicTriggerMessage = SendCinematicTriggerMessage,
-        SendCinematicBroadcastMessage = SendCinematicBroadcastMessage,
-        SendMergeTriggerMessage = SendMergeTriggerMessage,
-
-        -- Script execution messages
-        SendScriptRequestMessage = SendScriptRequestMessage,
-        SendScriptResultMessage = SendScriptResultMessage,
-
-        -- Lightweight status update (Player -> GM)
-        SendStatusLiteMessage = SendStatusLiteMessage,
-
-        -- NOTE: DB sync message creation is in object-database.lua
-        -- (CreateSyncMessageChunks, ReassembleChunkedSync)
-
-        -- Parsing
-        ParseMessage = ParseMessage,
-        ParseCaretDelimited = ParseCaretDelimited
-    }
+    return _messagingExport
 end

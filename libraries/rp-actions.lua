@@ -268,6 +268,116 @@ local METHOD_REGISTRY = {
                 data = {}
             }
         end
+    },
+
+    -- ========================================================================
+    -- NpcChat - Make a tagged NPC say/yell/emote (range-checked on NPC side)
+    -- ========================================================================
+    NpcChat = {
+        name = "NPC Chat",
+        description = "Makes a nearby NPC with a matching tag say, yell, or emote",
+        requiresParams = true,
+        paramSchema = {
+            {
+                key = "tag",
+                type = "text",
+                label = "NPC Tag (e.g. innkeeper, guard)",
+                required = true
+            },
+            {
+                key = "cmdType",
+                type = "dropdown",
+                label = "Chat type",
+                required = true,
+                options = {
+                    { value = "say",   label = "Say" },
+                    { value = "yell",  label = "Yell" },
+                    { value = "emote", label = "Emote" }
+                }
+            },
+            {
+                key = "text",
+                type = "text_with_placeholder",
+                label = "Text to speak",
+                required = true,
+                placeholder = "{player-name}"
+            }
+        },
+        execute = function(playerName, item, params)
+            if not params.tag or params.tag == "" then
+                return {
+                    result = RESULT_TYPES.FAIL,
+                    message = "NPC tag is required",
+                    data = {}
+                }
+            end
+            if not params.cmdType or params.cmdType == "" then
+                return {
+                    result = RESULT_TYPES.FAIL,
+                    message = "Chat type is required",
+                    data = {}
+                }
+            end
+            if not params.text or params.text == "" then
+                return {
+                    result = RESULT_TYPES.FAIL,
+                    message = "Text is required",
+                    data = {}
+                }
+            end
+
+            -- Resolve placeholders from source item
+            local resolvedText = objectDatabase.ApplyItemPlaceholders(
+                params.text, item.customText, item.additionalText, item.customNumber, playerName
+            )
+
+            messaging.SendNpcActionTriggerMessage(params.tag, params.cmdType, resolvedText)
+
+            return {
+                result = RESULT_TYPES.SUCCESS,
+                message = "NPC chat trigger sent",
+                data = {}
+            }
+        end
+    },
+
+    -- ========================================================================
+    -- WhisperPlayer - GM whispers the triggering player
+    -- ========================================================================
+    WhisperPlayer = {
+        name = "Whisper Player",
+        description = "Sends a whisper from the GM to the player who used the item",
+        requiresParams = true,
+        paramSchema = {
+            {
+                key = "text",
+                type = "text_with_placeholder",
+                label = "Whisper text",
+                required = true,
+                placeholder = "{player-name}"
+            }
+        },
+        execute = function(playerName, item, params)
+            if not params.text or params.text == "" then
+                return {
+                    result = RESULT_TYPES.FAIL,
+                    message = "Whisper text is required",
+                    data = {}
+                }
+            end
+
+            local resolvedText = objectDatabase.ApplyItemPlaceholders(
+                params.text, item.customText, item.additionalText, item.customNumber, playerName
+            )
+
+            messaging.SendWhisperTriggerMessage(resolvedText)
+
+            return {
+                result = RESULT_TYPES.SUCCESS,
+                message = "Whisper trigger sent",
+                data = {}
+            }
+        end
     }
 }
 

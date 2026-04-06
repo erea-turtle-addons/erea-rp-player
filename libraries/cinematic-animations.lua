@@ -184,7 +184,7 @@ local function RegisterExtension(registry, addonName)
     for key, anim in pairs(registry) do
         ANIMATION_REGISTRY[key] = anim
     end
-    if addonName and addonName ~= "" then
+    if addonName and type(addonName) == "string" and addonName ~= "" then
         table.insert(_registeredExtensions, addonName)
     end
 end
